@@ -134,6 +134,7 @@ dmypy.json
 # MISC
 /data
 /outputs
+/models
 neptune.cfg
 
 .neptune

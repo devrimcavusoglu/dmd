@@ -15,5 +15,11 @@ dependencies:
   - tqdm
   - imageio
   - pip:
+    - black==21.7b0
+    - click==8.0.4
+    - deepdiff==6.7.1
+    - flake8==3.9.2
+    - fire
     - imageio-ffmpeg>=0.4.3
+    - isort==5.9.2
     - pyspng
