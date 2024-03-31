@@ -20,8 +20,18 @@ conda create env -f environment.yml
 ### Models
 
 DMD method is an application of distillation, and thus requires a teacher model. The teacher diffusion model 
-used in
+used in the paper was [EDM](https://github.com/NVlabs/edm) models. Specifically, for CIFAR-10 we will focus on 
+a conditioned model. You can see pretrained EDM Models [here](https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/).
 
+### Dataset
+
+Being Prepared...
+
+## Training
+WIP.
+
+## Generation
+WIP.
 
 ## License
 
