@@ -1,22 +1,31 @@
 # Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024, Devrim Cavusoglu & Ahmet Burak Yıldırım
 #
 # This work is licensed under a Creative Commons
 # Attribution-NonCommercial-ShareAlike 4.0 International License.
 # You should have received a copy of the license along with this
 # work. If not, see http://creativecommons.org/licenses/by-nc-sa/4.0/
 
-"""Generate random images using the techniques described in the paper
-"Elucidating the Design Space of Diffusion-Based Generative Models"."""
+"""
+Generate random images using the techniques described in the paper
+"Elucidating the Design Space of Diffusion-Based Generative Models".
+
+This module is taken and adapted from https://github.com/NVLabs/edm with certain
+changes.
+"""
 import dataclasses
 import os
+import pickle
 import re
+import sys
 from typing import List, Optional, Union
 
 import PIL.Image
 import torch
 import tqdm
 
-from dmd.edm.networks import EDMPrecond
+from dmd import EDM_PACKAGE_DIR
+from dmd.edm import dnnlib
 from dmd.edm.sampler import edm_sampler
 from dmd.edm.torch_utils import distributed as dist
 
@@ -75,6 +84,15 @@ class EDMGenerator:
     def config(self) -> Optional[GenerationConfig]:
         return self._config
 
+    @property
+    def current_model_device(self) -> Optional[torch.device]:
+        """
+        This function assumes all model parameters are on the same device.
+        """
+        if self.model is None:
+            return
+        return next(self.model.parameters()).device
+
     def set_config(self, **kwargs):
         """
         Sets the generation config. For parameters see `GenerationConfig`.
@@ -85,39 +103,28 @@ class EDMGenerator:
 
     def load_model(self, network_path: str, device: torch.device) -> None:
         """
-        Loads a pretrained model from given path. This function is created as original
-        EDM models are saved as pkl and as a whole, and thus refactoring the Python module
-        breaks it. Instead, this function is loading the model from only saved weights, and
-        will not break. However, the weights model dependant, so currently this function
-        only supports EDM CIFAR conditioned model (VP). Other models may be added as desired.
+        Loads a pretrained model from given path. This function loads the model from the original
+        pickle file of EDM models.
+
+        Note:
+            The saved binary files (pickle) contain serialized Python object where some of them
+            require certain imports. This module is not identical to the structure of 'NVLabs/edm',
+            see the related comment.
 
         Args:
             network_path (str): Path to the model weights.
             device (torch.device): Device to load the model to.
-
-        Returns:
-            The loaded model.
         """
         if self.model is not None:
-            return
-        # The config below is taken from the pkl version of the saved model
-        # for edm-cifar10-32x32-cond-vp
-        network = EDMPrecond(
-            img_resolution=32,
-            img_channels=3,
-            label_dim=10,
-            resample_filter=[1, 1],
-            embedding_type="positional",
-            augment_dim=9,
-            dropout=0.13,
-            model_type="SongUNet",
-            encoder_type="standard",
-            channel_mult_noise=1,
-            model_channels=128,
-            channel_mult=(2, 2, 2),
-        )
-        network.load_state_dict(torch.load(network_path))
-        self.model = network.to(device)
+            raise RuntimeError(f"Model '{self.network_path}' is already loaded. To load a new model, "
+                               f"use 'unload_model' first.")
+
+        # Refactoring the package structure and import scheme (e.g. this module) breaks the loading of the
+        # pickle file (as it also possesses the complete module structure at the save time). The following
+        # line is a little trick to make the import structure the same to load the pickle without a failure.
+        sys.path.insert(0, EDM_PACKAGE_DIR.as_posix())
+        with dnnlib.util.open_url(network_path, verbose=(dist.get_rank() == 0)) as f:
+            self.model = pickle.load(f)['ema'].to(device)
 
     def unload_model(self):
         if self.model is not None:
@@ -126,7 +133,7 @@ class EDMGenerator:
             torch.cuda.empty_cache()
 
     @staticmethod
-    def parse_int_list(s: Union[str, List[int]]):
+    def _parse_int_list(s: Union[str, List[int]]):
         """
         Parse a comma separated list of numbers or ranges and return a list of ints.
         Example: '1,2,5-10' returns [1, 2, 5, 6, 7, 8, 9, 10]
@@ -143,17 +150,14 @@ class EDMGenerator:
                 ranges.append(int(p))
         return ranges
 
-    @classmethod
-    def generate_distributed(
-        cls,
-        network_path: str,
+    def __call__(self,
         outdir: str,
         subdirs: bool = False,
         seeds: Union[List[int], str] = "0-63",
         class_idx: Optional[int] = None,
         max_batch_size: int = 64,
         device: Optional[str] = None,
-        save_format: Optional[str] = None,
+        save_format: Optional[str] = "images",
         **kwargs,
     ):
         """
@@ -173,13 +177,12 @@ class EDMGenerator:
             --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl
 
         Args:
-            network (str): Network pickle filename.
             outdir (str): Where to save the output images.
             seeds (Union(List(int), str): Random seeds (e.g. 1,2,5-10).
             subdirs (bool): If true, creates subdirectory for every 1000 seeds.
             class_idx (int): Class label  [default: random].
             max_batch_size (int): Maximum batch size. [default: 64]
-            save_format (Optional(str)): Format to save to `outdir`.
+            save_format (Optional(str)): Format to save to `outdir`. [default: 'images']
                 - None: no saving, and generated samples are returned.
                 - 'images': the generated images are saved.
                 - 'all': the generated images and latents are saved together (for precomputing).
@@ -189,7 +192,7 @@ class EDMGenerator:
             pass
         """
         dist.init()
-        seeds = cls.parse_int_list(seeds)
+        seeds = self._parse_int_list(seeds)
         num_batches = ((len(seeds) - 1) // (max_batch_size * dist.get_world_size()) + 1) * dist.get_world_size()
         all_batches = torch.as_tensor(seeds).tensor_split(num_batches)
         rank_batches = all_batches[dist.get_rank() :: dist.get_world_size()]
@@ -198,13 +201,6 @@ class EDMGenerator:
         if dist.get_rank() != 0:
             torch.distributed.barrier()
 
-        generator = cls(network_path, device)
-
-        # Load network.
-        dist.print0(f'Loading network from "{network_path}"...')
-        network = generator.model
-
-        dist.print0(f"Device: {dir(network)}")
         # Other ranks follow.
         if dist.get_rank() == 0:
             torch.distributed.barrier()
@@ -217,7 +213,7 @@ class EDMGenerator:
             if batch_size == 0:
                 continue
 
-            latents, images = cls.generate_batch(seeds=batch_seeds, class_idx=class_idx, **kwargs)
+            latents, images = self.generate_batch(seeds=batch_seeds, class_idx=class_idx, **kwargs)
 
             # Save images.
             if save_format == "images":
@@ -247,7 +243,7 @@ class EDMGenerator:
 
     def generate_batch(self, seeds: List[int], class_idx: Optional[int] = None, **kwargs):
         self.set_config(**kwargs)
-        device = next(self.model.parameters()).device
+        device = self.current_model_device
         batch_size = len(seeds)
 
         # Pick latents and labels.
