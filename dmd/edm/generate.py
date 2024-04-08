@@ -18,8 +18,10 @@ import os
 import pickle
 import re
 import sys
+from pathlib import Path
 from typing import List, Optional, Union
 
+import numpy as np
 import PIL.Image
 import torch
 import tqdm
@@ -116,15 +118,17 @@ class EDMGenerator:
             device (torch.device): Device to load the model to.
         """
         if self.model is not None:
-            raise RuntimeError(f"Model '{self.network_path}' is already loaded. To load a new model, "
-                               f"use 'unload_model' first.")
+            raise RuntimeError(
+                f"Model '{self.network_path}' is already loaded. To load a new model, "
+                f"use 'unload_model' first."
+            )
 
         # Refactoring the package structure and import scheme (e.g. this module) breaks the loading of the
         # pickle file (as it also possesses the complete module structure at the save time). The following
         # line is a little trick to make the import structure the same to load the pickle without a failure.
         sys.path.insert(0, EDM_PACKAGE_DIR.as_posix())
         with dnnlib.util.open_url(network_path, verbose=(dist.get_rank() == 0)) as f:
-            self.model = pickle.load(f)['ema'].to(device)
+            self.model = pickle.load(f)["ema"].to(device)
 
     def unload_model(self):
         if self.model is not None:
@@ -150,12 +154,62 @@ class EDMGenerator:
                 ranges.append(int(p))
         return ranges
 
-    def __call__(self,
+    @staticmethod
+    def _save_array_as_np(
+        output_dir: str,
+        batch_seeds: Union[torch.Tensor, np.ndarray],
+        images: torch.Tensor,
+        latents: Optional[torch.Tensor] = None,
+        subdirs: bool = False,
+        class_idx: int = None,
+    ):
+        images_np = (images * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).cpu().numpy()
+        output_dir = Path(output_dir)
+        images_output_dir = output_dir / "images"
+        latents_output_dir = output_dir / "latents"
+        if class_idx is not None:
+            images_output_dir = images_output_dir / f"class_{class_idx}"
+            latents_output_dir = latents_output_dir / f"class_{class_idx}"
+        if latents is not None:
+            latents_np = (latents * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).cpu().numpy()
+            for seed, image_np, latent_np in zip(batch_seeds, images_np, latents_np):
+                images_dir = (
+                    os.path.join(images_output_dir, f"{seed - seed % 1000:06d}") if subdirs else images_output_dir
+                )
+                latents_dir = (
+                    os.path.join(latents_output_dir, f"{seed - seed % 1000:06d}")
+                    if subdirs
+                    else latents_output_dir
+                )
+                os.makedirs(images_dir, exist_ok=True)
+                os.makedirs(latents_dir, exist_ok=True)
+                image_path = os.path.join(images_dir, f"{seed:06d}.png")
+                latent_path = os.path.join(latents_dir, f"{seed:06d}_latents.png")
+                if image_np.shape[2] == 1:
+                    PIL.Image.fromarray(image_np[:, :, 0], "L").save(image_path)
+                    PIL.Image.fromarray(latent_np[:, :, 0], "L").save(latent_path)
+                else:
+                    PIL.Image.fromarray(image_np, "RGB").save(image_path)
+                    PIL.Image.fromarray(latent_np, "RGB").save(latent_path)
+        else:
+            for seed, image_np in zip(batch_seeds, images_np):
+                images_dir = (
+                    os.path.join(images_output_dir, f"{seed - seed % 1000:06d}") if subdirs else images_output_dir
+                )
+                os.makedirs(images_dir, exist_ok=True)
+                image_path = os.path.join(images_dir, f"{seed:06d}.png")
+                if image_np.shape[2] == 1:
+                    PIL.Image.fromarray(image_np[:, :, 0], "L").save(image_path)
+                else:
+                    PIL.Image.fromarray(image_np, "RGB").save(image_path)
+
+    def __call__(
+        self,
         outdir: str,
         subdirs: bool = False,
         seeds: Union[List[int], str] = "0-63",
         class_idx: Optional[int] = None,
-        max_batch_size: int = 64,
+        batch_size: int = 64,
         device: Optional[str] = None,
         save_format: Optional[str] = "images",
         **kwargs,
@@ -181,7 +235,7 @@ class EDMGenerator:
             seeds (Union(List(int), str): Random seeds (e.g. 1,2,5-10).
             subdirs (bool): If true, creates subdirectory for every 1000 seeds.
             class_idx (int): Class label  [default: random].
-            max_batch_size (int): Maximum batch size. [default: 64]
+            batch_size (int): Maximum batch size. [default: 64]
             save_format (Optional(str)): Format to save to `outdir`. [default: 'images']
                 - None: no saving, and generated samples are returned.
                 - 'images': the generated images are saved.
@@ -189,11 +243,15 @@ class EDMGenerator:
             **kwargs: Additional parameters for generation config, see `GenerationConfig`.
 
         Returns:
-            pass
+            None
         """
-        dist.init()
+        try:
+            dist.init()
+        except RuntimeError:
+            # Distributed setup is already initialized.
+            pass
         seeds = self._parse_int_list(seeds)
-        num_batches = ((len(seeds) - 1) // (max_batch_size * dist.get_world_size()) + 1) * dist.get_world_size()
+        num_batches = ((len(seeds) - 1) // (batch_size * dist.get_world_size()) + 1) * dist.get_world_size()
         all_batches = torch.as_tensor(seeds).tensor_split(num_batches)
         rank_batches = all_batches[dist.get_rank() :: dist.get_world_size()]
 
@@ -217,25 +275,18 @@ class EDMGenerator:
 
             # Save images.
             if save_format == "images":
-                images_np = (images * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).cpu().numpy()
-                for seed, image_np in zip(batch_seeds, images_np):
-                    image_dir = os.path.join(outdir, f"{seed-seed%1000:06d}") if subdirs else outdir
-                    os.makedirs(image_dir, exist_ok=True)
-                    image_path = os.path.join(image_dir, f"{seed:06d}.png")
-                    if image_np.shape[2] == 1:
-                        PIL.Image.fromarray(image_np[:, :, 0], "L").save(image_path)
-                    else:
-                        PIL.Image.fromarray(image_np, "RGB").save(image_path)
+                self._save_array_as_np(
+                    outdir, images=images, batch_seeds=batch_seeds, subdirs=subdirs, class_idx=class_idx
+                )
             elif save_format == "all":
-                images_np = (images * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).cpu().numpy()
-                for seed, image_np in zip(batch_seeds, images_np):
-                    image_dir = os.path.join(outdir, f"{seed - seed % 1000:06d}") if subdirs else outdir
-                    os.makedirs(image_dir, exist_ok=True)
-                    image_path = os.path.join(image_dir, f"{seed:06d}.png")
-                    if image_np.shape[2] == 1:
-                        PIL.Image.fromarray(image_np[:, :, 0], "L").save(image_path)
-                    else:
-                        PIL.Image.fromarray(image_np, "RGB").save(image_path)
+                self._save_array_as_np(
+                    outdir,
+                    images=images,
+                    latents=latents,
+                    batch_seeds=batch_seeds,
+                    subdirs=subdirs,
+                    class_idx=class_idx,
+                )
 
         # Done.
         torch.distributed.barrier()
