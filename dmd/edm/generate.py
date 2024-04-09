@@ -155,53 +155,44 @@ class EDMGenerator:
         return ranges
 
     @staticmethod
-    def _save_array_as_np(
+    def _save_array_as_images(
         output_dir: str,
         batch_seeds: Union[torch.Tensor, np.ndarray],
         images: torch.Tensor,
-        latents: Optional[torch.Tensor] = None,
         subdirs: bool = False,
         class_idx: int = None,
     ):
         images_np = (images * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).cpu().numpy()
         output_dir = Path(output_dir)
-        images_output_dir = output_dir / "images"
-        latents_output_dir = output_dir / "latents"
-        if class_idx is not None:
-            images_output_dir = images_output_dir / f"class_{class_idx}"
-            latents_output_dir = latents_output_dir / f"class_{class_idx}"
-        if latents is not None:
-            latents_np = (latents * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).cpu().numpy()
-            for seed, image_np, latent_np in zip(batch_seeds, images_np, latents_np):
-                images_dir = (
-                    os.path.join(images_output_dir, f"{seed - seed % 1000:06d}") if subdirs else images_output_dir
-                )
-                latents_dir = (
-                    os.path.join(latents_output_dir, f"{seed - seed % 1000:06d}")
-                    if subdirs
-                    else latents_output_dir
-                )
-                os.makedirs(images_dir, exist_ok=True)
-                os.makedirs(latents_dir, exist_ok=True)
-                image_path = os.path.join(images_dir, f"{seed:06d}.png")
-                latent_path = os.path.join(latents_dir, f"{seed:06d}_latents.png")
-                if image_np.shape[2] == 1:
-                    PIL.Image.fromarray(image_np[:, :, 0], "L").save(image_path)
-                    PIL.Image.fromarray(latent_np[:, :, 0], "L").save(latent_path)
-                else:
-                    PIL.Image.fromarray(image_np, "RGB").save(image_path)
-                    PIL.Image.fromarray(latent_np, "RGB").save(latent_path)
-        else:
-            for seed, image_np in zip(batch_seeds, images_np):
-                images_dir = (
-                    os.path.join(images_output_dir, f"{seed - seed % 1000:06d}") if subdirs else images_output_dir
-                )
-                os.makedirs(images_dir, exist_ok=True)
-                image_path = os.path.join(images_dir, f"{seed:06d}.png")
-                if image_np.shape[2] == 1:
-                    PIL.Image.fromarray(image_np[:, :, 0], "L").save(image_path)
-                else:
-                    PIL.Image.fromarray(image_np, "RGB").save(image_path)
+        for seed, image_np in zip(batch_seeds, images_np):
+            if class_idx is not None:
+                images_output_dir = output_dir / f"class_{class_idx}"
+            images_dir = (
+                os.path.join(images_output_dir, f"{seed - seed % 1000:06d}") if subdirs else images_output_dir
+            )
+            os.makedirs(images_dir, exist_ok=True)
+            image_path = os.path.join(images_dir, f"{seed:06d}.png")
+            if image_np.shape[2] == 1:
+                PIL.Image.fromarray(image_np[:, :, 0], "L").save(image_path)
+            else:
+                PIL.Image.fromarray(image_np, "RGB").save(image_path)
+
+    @staticmethod
+    def _save_array_as_pairs(
+        output_dir: str,
+        images: torch.Tensor,
+        latents: torch.Tensor,
+        save_start_idx: int,
+    ):
+        images_np = images.cpu().numpy()
+        latents_np = latents.cpu().numpy()
+        instance_ids = list(range(save_start_idx, save_start_idx+len(images_np)))
+        output_dir = Path(output_dir)
+        samples_output_dir = output_dir / "samples"
+        os.makedirs(samples_output_dir, exist_ok=True)
+        for iid, image_np, latent_np in zip(instance_ids, images_np, latents_np):
+            pairs = np.stack([image_np, latent_np], axis=0)
+            np.save(os.path.join(samples_output_dir, f"{iid:06d}.npy"), pairs)
 
     def __call__(
         self,
@@ -212,6 +203,7 @@ class EDMGenerator:
         batch_size: int = 64,
         device: Optional[str] = None,
         save_format: Optional[str] = "images",
+        save_start_idx: Optional[int] = 0,
         **kwargs,
     ):
         """
@@ -239,7 +231,8 @@ class EDMGenerator:
             save_format (Optional(str)): Format to save to `outdir`. [default: 'images']
                 - None: no saving, and generated samples are returned.
                 - 'images': the generated images are saved.
-                - 'all': the generated images and latents are saved together (for precomputing).
+                - 'pairs': the generated images and latents are saved together (for distillation training).
+            save_start_idx (Optional(int)): Starting index for the saved images. [default: 'images']
             **kwargs: Additional parameters for generation config, see `GenerationConfig`.
 
         Returns:
@@ -275,17 +268,15 @@ class EDMGenerator:
 
             # Save images.
             if save_format == "images":
-                self._save_array_as_np(
+                self._save_array_as_images(
                     outdir, images=images, batch_seeds=batch_seeds, subdirs=subdirs, class_idx=class_idx
                 )
-            elif save_format == "all":
-                self._save_array_as_np(
+            elif save_format == "pairs":
+                self._save_array_as_pairs(
                     outdir,
                     images=images,
                     latents=latents,
-                    batch_seeds=batch_seeds,
-                    subdirs=subdirs,
-                    class_idx=class_idx,
+                    save_start_idx=save_start_idx
                 )
 
         # Done.
