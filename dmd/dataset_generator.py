@@ -24,7 +24,7 @@ def generate_distillation_dataset(
     annotations = {"data": [], "version": "0.1"}
     seeds = list(range(size_per_class))
     instance_id = 0
-    for cls in range(2):
+    for cls in range(10):
         edm_generator(
             output_dir.as_posix(),
             seeds=seeds,
