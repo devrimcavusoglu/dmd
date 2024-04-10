@@ -31,7 +31,11 @@ a conditioned model. You can see pretrained EDM Models [here](https://nvlabs-fi-
 
 ### Dataset
 
-Being Prepared...
+Download the distillation dataset by,
+
+```shell
+bash scripts/download_data.sh
+```
 
 ## Training
 WIP.
