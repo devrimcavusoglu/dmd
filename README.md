@@ -17,21 +17,59 @@ Create a conda environment with the configuration file, and activate the environ
 conda create env -f environment.yml
 ```
 
+You can access the CLI by, 
+
+```shell
+python -m dmd --help
+```
+
 ### Models
 
 DMD method is an application of distillation, and thus requires a teacher model. The teacher diffusion model 
-used in the paper was [EDM](https://github.com/NVlabs/edm) models. Specifically, for CIFAR-10 we will focus on 
+used in the paper was [EDM models](https://github.com/NVlabs/edm). Specifically, for CIFAR-10 we will focus on 
 a conditioned model. You can see pretrained EDM Models [here](https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/).
 
 ### Dataset
 
-Being Prepared...
+Download the distillation dataset by,
+
+```shell
+bash scripts/download_data.sh
+```
 
 ## Training
 WIP.
 
 ## Generation
 WIP.
+
+## Development
+
+For convenience add the project root to PYTHONPATH, earlier conda versions support this by `develop` command, run
+
+```shell
+conda develop /path/to/project_root
+```
+
+However, `conda develop` is deprecated for recent versions, you can manually add the project root to PYTHONPATH by
+
+```shell
+export PYTHONPATH="${PYTHONPATH}:/path/to/project_root"
+```
+
+### Code Formatting
+
+To format the codebase, run
+
+```shell
+python -m scripts.run_code_style format
+```
+
+To check whether the codebase is well-formatted, run
+
+```shell
+python -m scripts.run_code_style check
+```
 
 ## License
 
