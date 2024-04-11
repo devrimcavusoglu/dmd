@@ -4,9 +4,8 @@ import sys
 import torch
 from torch.nn import Module
 
-from dmd import EDM_PACKAGE_DIR
-from dmd.edm import dnnlib
-from dmd.edm.torch_utils import distributed as dist
+from dmd import SOURCES_ROOT, dnnlib
+from dmd.torch_utils import distributed as dist
 
 
 def load_model(network_path: str, device: torch.device) -> None:
@@ -26,7 +25,7 @@ def load_model(network_path: str, device: torch.device) -> None:
     # Refactoring the package structure and import scheme (e.g. this module) breaks the loading of the
     # pickle file (as it also possesses the complete module structure at the save time). The following
     # line is a little trick to make the import structure the same to load the pickle without a failure.
-    sys.path.insert(0, EDM_PACKAGE_DIR.as_posix())
+    sys.path.insert(0, SOURCES_ROOT.as_posix())
     with dnnlib.util.open_url(network_path, verbose=(dist.get_rank() == 0)) as f:
         return pickle.load(f)["ema"].to(device)
 

@@ -26,10 +26,10 @@ import PIL.Image
 import torch
 import tqdm
 
-from dmd import EDM_PACKAGE_DIR
-from dmd.edm import dnnlib
-from dmd.edm.sampler import edm_sampler
-from dmd.edm.torch_utils import distributed as dist
+from dmd import SOURCES_ROOT, dnnlib
+from dmd.sampler import edm_sampler, get_sigmas_karras
+from dmd.torch_utils import distributed as dist
+from dmd.utils.array import torch_to_pillow
 
 
 class StackedRandomGenerator:
@@ -126,7 +126,7 @@ class EDMGenerator:
         # Refactoring the package structure and import scheme (e.g. this module) breaks the loading of the
         # pickle file (as it also possesses the complete module structure at the save time). The following
         # line is a little trick to make the import structure the same to load the pickle without a failure.
-        sys.path.insert(0, EDM_PACKAGE_DIR.as_posix())
+        sys.path.insert(0, SOURCES_ROOT.as_posix())
         with dnnlib.util.open_url(network_path, verbose=(dist.get_rank() == 0)) as f:
             self.model = pickle.load(f)["ema"].to(device)
 
@@ -319,3 +319,35 @@ class EDMGenerator:
             randn_like=rnd.randn_like,
         )
         return latents, images
+
+
+if __name__ == "__main__":
+    class_idx = 1
+    device = torch.device("cuda")
+    seeds = [0,1]
+    generator = EDMGenerator(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl")
+    _, im = generator.generate_batch(seeds=seeds, class_idx=class_idx)
+    rnd = StackedRandomGenerator(device, seeds)
+    torch_to_pillow(im, 0).show()
+    sigma = get_sigmas_karras(1000, sigma_min=0.002, sigma_max=80, rho=7.0, device=im.device)
+    noise = torch.randn_like(im, device=im.device)
+    latents = im + noise * sigma[-19, None, None, None]
+    class_labels = None
+    if class_idx is not None:
+        class_labels = torch.zeros(im.shape[0], 10, device=device)
+        class_labels[:, class_idx] = 1
+    images = edm_sampler(
+            generator.model,
+            latents,
+            steps=generator.config.steps,
+            sigma_min=generator.config.sigma_min,
+            sigma_max=generator.config.sigma_max,
+            rho=generator.config.rho,
+            S_churn=generator.config.S_churn,
+            S_min=generator.config.S_min,
+            S_max=generator.config.S_max,
+            S_noise=generator.config.S_noise,
+            class_labels=class_labels,
+            randn_like=rnd.randn_like
+    )
+    torch_to_pillow(images, 0).show()

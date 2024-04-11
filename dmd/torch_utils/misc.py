@@ -12,7 +12,7 @@ import warnings
 import numpy as np
 import torch
 
-from dmd.edm import dnnlib
+from dmd import dnnlib
 
 # ----------------------------------------------------------------------------
 # Cached construction of constant tensors. Avoids CPU=>GPU copy when the

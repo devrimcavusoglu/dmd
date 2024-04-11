@@ -9,7 +9,8 @@ import os
 
 import torch
 
-from dmd.edm.torch_utils import training_stats
+from dmd.torch_utils import training_stats
+
 
 # ----------------------------------------------------------------------------
 

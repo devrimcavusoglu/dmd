@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from dmd.edm.generate import EDMGenerator
+from dmd.generate import EDMGenerator
 
 
 def generate_distillation_dataset(
