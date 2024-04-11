@@ -20,7 +20,7 @@ import sys
 import types
 import uuid
 
-from dmd.edm import dnnlib
+from dmd import dnnlib
 
 # ----------------------------------------------------------------------------
 

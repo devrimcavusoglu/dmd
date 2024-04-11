@@ -15,8 +15,8 @@ import re
 import numpy as np
 import torch
 
-from dmd.edm import dnnlib
-from dmd.edm.torch_utils import misc
+from dmd import dnnlib
+from dmd.torch_utils import misc
 
 # ----------------------------------------------------------------------------
 
