@@ -26,7 +26,6 @@ for i in tqdm(range(num_samples)):
     h5_sample_path = f"/data/{iid}"
     hf[h5_sample_path] = pairs
     hf[h5_sample_path].attrs['class_idx'] = class_idx
-    hf[h5_sample_path].attrs['pairs_path'] = pairs_path
     hf[h5_sample_path].attrs['seed'] = seed
     
 hf.close()
