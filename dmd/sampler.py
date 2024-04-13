@@ -10,6 +10,8 @@ import torch
 
 from dmd.utils.array import torch_to_pillow
 
+# 8x image -> 8x timestep 5,10
+
 
 def get_sigmas_karras(n, sigma_min, sigma_max, rho=7.0, device="cpu"):
     """
@@ -87,9 +89,14 @@ if __name__ == "__main__":
     latents = torch.randn(1,3,32,32, device=device)
     mu_real = load_model(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
                          device=device)
-    samples = edm_sampler(
-            mu_real,
-            latents=latents,
-    )
-    torch_to_pillow(samples, 0).show()
 
+    s = get_sigmas_karras(1000, 0.002, 80, device=device)
+    # samples = edm_sampler(
+    #         mu_real,
+    #         latents=latents,
+    # )
+
+    class_labels = torch.zeros(1, 10, device=device)
+    class_labels[:, 0] = 1
+    im = mu_real(latents, s[10], class_labels=class_labels)
+    torch_to_pillow(im, 0).show()

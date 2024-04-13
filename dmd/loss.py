@@ -18,10 +18,10 @@ class DistributionMatchingLoss(_Loss):
 
         sigma = get_sigmas_karras(1000, sigma_min=0.002, sigma_max=80, rho=7.0, device=x.device)
         print("Timestep:", timestep)
-        ns = noise * sigma[-timestep[0], None, None, None]  # broadcast for scalar product
+        ns = noise * sigma[-900, None, None, None]  # broadcast for scalar product
         noisy_x = x + ns
         torch_to_pillow(x, 0).show()
-        torch_to_pillow(ns, 0).show()
+        # torch_to_pillow(ns, 0).show()
         torch_to_pillow(noisy_x, 0).show()
 
         with torch.no_grad():
@@ -53,8 +53,8 @@ if __name__ == "__main__":
 
     loss = DistributionMatchingLoss()
     device = torch.device("cuda")
-    im1, lt1 = np.load("/home/devrim/lab/gh/dmd/data/distillation_dataset/samples/000000.npy")
-    im2, lt2 = np.load("/home/devrim/lab/gh/dmd/data/distillation_dataset/samples/000003.npy")
+    im1, lt1 = np.load("/home/devrim/lab/gh/ms/dmd/data/distillation_dataset/samples/000000.npy")
+    im2, lt2 = np.load("/home/devrim/lab/gh/ms/dmd/data/distillation_dataset/samples/000003.npy")
     print(im1.shape, lt1.shape)
     images = torch.from_numpy(np.stack([im1, im2], axis=0)).to(device)
     latents = torch.from_numpy(np.stack([lt1, lt2], axis=0)).to(device)
