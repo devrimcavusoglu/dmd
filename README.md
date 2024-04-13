@@ -14,7 +14,7 @@ adjustments.
 Create a conda environment with the configuration file, and activate the environment when necessary.
 
 ```shell
-conda create env -f environment.yml
+conda env create -f environment.yml
 ```
 
 You can access the CLI by, 
