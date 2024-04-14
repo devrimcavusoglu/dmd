@@ -15,9 +15,7 @@ changes.
 """
 import dataclasses
 import os
-import pickle
 import re
-import sys
 from pathlib import Path
 from typing import List, Optional, Union
 
@@ -29,7 +27,6 @@ import tqdm
 from dmd.modeling_utils import load_model
 from dmd.sampler import edm_sampler
 from dmd.torch_utils import distributed as dist
-from dmd.utils.array import torch_to_pillow
 
 
 class StackedRandomGenerator:
@@ -271,10 +268,7 @@ class EDMGenerator:
                 )
             elif save_format == "pairs":
                 self._save_array_as_pairs(
-                    outdir,
-                    images=images,
-                    latents=latents,
-                    save_start_idx=save_start_idx + batch_seeds[0]
+                    outdir, images=images, latents=latents, save_start_idx=save_start_idx + batch_seeds[0]
                 )
 
         # Done.

@@ -6,6 +6,8 @@ exclude = '''
     | .git
     | venv
     | .venv
+    | data
+    | notebooks
   )/
 )
 '''
