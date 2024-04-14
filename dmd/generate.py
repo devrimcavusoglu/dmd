@@ -80,7 +80,7 @@ class EDMGenerator:
         self.device = torch.device(self.device)
         self.model = None
         if load_on_init:
-            self.load_model(network_path, self.device)
+            self.model = load_model(network_path, self.device)
         self.set_config()
 
     @property
