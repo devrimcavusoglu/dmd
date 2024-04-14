@@ -276,7 +276,7 @@ class EDMGenerator:
                     outdir,
                     images=images,
                     latents=latents,
-                    save_start_idx=save_start_idx
+                    save_start_idx=save_start_idx + batch_seeds[0]
                 )
 
         # Done.
