@@ -11,7 +11,6 @@ import torch
 
 from dmd.torch_utils import training_stats
 
-
 # ----------------------------------------------------------------------------
 
 

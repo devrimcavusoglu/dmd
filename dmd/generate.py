@@ -15,9 +15,7 @@ changes.
 """
 import dataclasses
 import os
-import pickle
 import re
-import sys
 from pathlib import Path
 from typing import List, Optional, Union
 
@@ -26,10 +24,9 @@ import PIL.Image
 import torch
 import tqdm
 
-from dmd import SOURCES_ROOT, dnnlib
-from dmd.sampler import edm_sampler, get_sigmas_karras
+from dmd.modeling_utils import load_model
+from dmd.sampler import edm_sampler
 from dmd.torch_utils import distributed as dist
-from dmd.utils.array import torch_to_pillow
 
 
 class StackedRandomGenerator:
@@ -69,6 +66,10 @@ class GenerationConfig:
 
 
 class EDMGenerator:
+    """
+    Generator class for EDM Models
+    """
+
     _config = None
 
     def __init__(self, network_path: str, device: str = None, load_on_init: bool = True):
@@ -79,7 +80,7 @@ class EDMGenerator:
         self.device = torch.device(self.device)
         self.model = None
         if load_on_init:
-            self.load_model(network_path, self.device)
+            self.model = load_model(network_path, self.device)
         self.set_config()
 
     @property
@@ -102,33 +103,6 @@ class EDMGenerator:
         current_params = self.config.__dict__ if self.config is not None else {}
         params = {**current_params, **kwargs}  # overwrite current config
         self._config = GenerationConfig(**params)
-
-    def load_model(self, network_path: str, device: torch.device) -> None:
-        """
-        Loads a pretrained model from given path. This function loads the model from the original
-        pickle file of EDM models.
-
-        Note:
-            The saved binary files (pickle) contain serialized Python object where some of them
-            require certain imports. This module is not identical to the structure of 'NVLabs/edm',
-            see the related comment.
-
-        Args:
-            network_path (str): Path to the model weights.
-            device (torch.device): Device to load the model to.
-        """
-        if self.model is not None:
-            raise RuntimeError(
-                f"Model '{self.network_path}' is already loaded. To load a new model, "
-                f"use 'unload_model' first."
-            )
-
-        # Refactoring the package structure and import scheme (e.g. this module) breaks the loading of the
-        # pickle file (as it also possesses the complete module structure at the save time). The following
-        # line is a little trick to make the import structure the same to load the pickle without a failure.
-        sys.path.insert(0, SOURCES_ROOT.as_posix())
-        with dnnlib.util.open_url(network_path, verbose=(dist.get_rank() == 0)) as f:
-            self.model = pickle.load(f)["ema"].to(device)
 
     def unload_model(self):
         if self.model is not None:
@@ -163,10 +137,10 @@ class EDMGenerator:
         class_idx: int = None,
     ):
         images_np = (images * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).cpu().numpy()
-        output_dir = Path(output_dir)
+        images_output_dir = Path(output_dir)
         for seed, image_np in zip(batch_seeds, images_np):
             if class_idx is not None:
-                images_output_dir = output_dir / f"class_{class_idx}"
+                images_output_dir = images_output_dir / f"class_{class_idx}"
             images_dir = (
                 os.path.join(images_output_dir, f"{seed - seed % 1000:06d}") if subdirs else images_output_dir
             )
@@ -186,7 +160,7 @@ class EDMGenerator:
     ):
         images_np = images.cpu().numpy()
         latents_np = latents.cpu().numpy()
-        instance_ids = list(range(save_start_idx, save_start_idx+len(images_np)))
+        instance_ids = list(range(save_start_idx, save_start_idx + len(images_np)))
         output_dir = Path(output_dir)
         samples_output_dir = output_dir / "samples"
         os.makedirs(samples_output_dir, exist_ok=True)
@@ -272,12 +246,7 @@ class EDMGenerator:
                     outdir, images=images, batch_seeds=batch_seeds, subdirs=subdirs, class_idx=class_idx
                 )
             elif save_format == "pairs":
-                self._save_array_as_pairs(
-                    outdir,
-                    images=images,
-                    latents=latents,
-                    save_start_idx=save_start_idx
-                )
+                self._save_array_as_pairs(outdir, images=images, latents=latents, save_start_idx=save_start_idx)
 
         # Done.
         torch.distributed.barrier()
@@ -319,35 +288,3 @@ class EDMGenerator:
             randn_like=rnd.randn_like,
         )
         return latents, images
-
-
-if __name__ == "__main__":
-    class_idx = 1
-    device = torch.device("cuda")
-    seeds = [0,1]
-    generator = EDMGenerator(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl")
-    _, im = generator.generate_batch(seeds=seeds, class_idx=class_idx)
-    rnd = StackedRandomGenerator(device, seeds)
-    torch_to_pillow(im, 0).show()
-    sigma = get_sigmas_karras(1000, sigma_min=0.002, sigma_max=80, rho=7.0, device=im.device)
-    noise = torch.randn_like(im, device=im.device)
-    latents = im + noise * sigma[-19, None, None, None]
-    class_labels = None
-    if class_idx is not None:
-        class_labels = torch.zeros(im.shape[0], 10, device=device)
-        class_labels[:, class_idx] = 1
-    images = edm_sampler(
-            generator.model,
-            latents,
-            steps=generator.config.steps,
-            sigma_min=generator.config.sigma_min,
-            sigma_max=generator.config.sigma_max,
-            rho=generator.config.rho,
-            S_churn=generator.config.S_churn,
-            S_min=generator.config.S_min,
-            S_max=generator.config.S_max,
-            S_noise=generator.config.S_noise,
-            class_labels=class_labels,
-            randn_like=rnd.randn_like
-    )
-    torch_to_pillow(images, 0).show()
