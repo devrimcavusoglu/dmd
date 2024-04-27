@@ -42,9 +42,9 @@ class GeneratorLoss(_Loss):
         self.lpips = LPIPS()
         self.lambda_reg = lambda_reg
 
-    def forward(self, mu_real: Module, mu_fake: Module, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def forward(self, mu_real: Module, mu_fake: Module, x: torch.Tensor, x_ref: torch.Tensor, y_ref: torch.Tensor) -> torch.Tensor:
         loss_kl = self.dmd_loss(mu_real, mu_fake, x)
-        loss_reg = self.lpips(x, y)
+        loss_reg = self.lpips(x_ref, y_ref)
         return loss_kl + self.lambda_reg * loss_reg
 
 

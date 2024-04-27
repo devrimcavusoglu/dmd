@@ -60,16 +60,12 @@ def get_sigmas_karras(n, sigma_min, sigma_max, rho=7.0, device="cpu"):
 
 
 def forward_diffusion(
-    x: torch.Tensor, t: torch.Tensor, noise: torch.Tensor = None
+    x: torch.Tensor, t: torch.Tensor, n: int = 1000, noise: torch.Tensor = None
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     if noise is None:
         noise = torch.randn_like(x, device=x.device)
 
-    sigma = get_sigmas_karras(1000, sigma_min=0.002, sigma_max=80, rho=7.0, device=x.device)  # N, N-1, ..., 0
+    sigma = get_sigmas_karras(n, sigma_min=0.002, sigma_max=80, rho=7.0, device=x.device)  # N, N-1, ..., 0
     ns = noise * sigma[-t, None, None, None]  # broadcast for scalar product
     noisy_x = x + ns
     return noisy_x, sigma[-t]
-
-
-def weighting_snr(sigma: torch.Tensor, sigma_data: float) -> torch.Tensor:
-    return sigma_data ** 2 / (sigma ** 2 + sigma_data ** 2)
