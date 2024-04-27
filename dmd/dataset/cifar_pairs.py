@@ -3,6 +3,8 @@ from torch.utils.data import Dataset
 
 
 class CIFARPairs(Dataset):
+    _shape = (3, 32, 32)  # CHW
+
     def __init__(self, h5_dataset_path):
         self.h5_dataset_path = h5_dataset_path
         self.dataset = None
@@ -31,3 +33,18 @@ class CIFARPairs(Dataset):
         }
 
         return return_dict
+
+    @property
+    def image_shape(self):
+        return list(self._shape)
+
+    @property
+    def num_channels(self):
+        assert len(self.image_shape) == 3  # CHW
+        return self.image_shape[0]
+
+    @property
+    def resolution(self):
+        assert len(self.image_shape) == 3  # CHW
+        assert self.image_shape[1] == self.image_shape[2]
+        return self.image_shape[1]
