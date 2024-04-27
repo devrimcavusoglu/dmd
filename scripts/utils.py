@@ -4,8 +4,12 @@ import os
 import re
 import shutil
 import sys
+from pathlib import Path
 
 from deepdiff import DeepDiff
+
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / 'data'
 
 
 def load_json(path: str):
