@@ -1,7 +1,8 @@
-from torch.utils.data import Dataset
 import h5py
+from torch.utils.data import Dataset
 
-class CifarPairs(Dataset):
+
+class CIFARPairs(Dataset):
     def __init__(self, h5_dataset_path):
         self.h5_dataset_path = h5_dataset_path
         self.dataset = None
