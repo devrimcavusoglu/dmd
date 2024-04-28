@@ -57,6 +57,11 @@ However, `conda develop` is deprecated for recent versions, you can manually add
 export PYTHONPATH="${PYTHONPATH}:/path/to/project_root"
 ```
 
+## Assumptions
+
+- Generator Z (being the same as EDM, not time independent UNet, scaling to var=80)
+- Hyperparameters are explicitly stated, but there's no information for which model they are used. We assumed for both model when there is no additional information. (optimizer, lr)
+
 ### Code Formatting
 
 To format the codebase, run

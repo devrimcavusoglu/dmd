@@ -9,6 +9,30 @@ from dmd import SOURCES_ROOT, dnnlib
 from dmd.torch_utils import distributed as dist
 
 
+class StackedRandomGenerator:
+    """
+    Wrapper for torch.Generator that allows specifying a different random seed
+    for each sample in a minibatch.
+    """
+
+    def __init__(self, device, seeds):
+        super().__init__()
+        self.generators = [torch.Generator(device).manual_seed(int(seed) % (1 << 32)) for seed in seeds]
+
+    def randn(self, size, **kwargs):
+        assert size[0] == len(self.generators)
+        return torch.stack([torch.randn(size[1:], generator=gen, **kwargs) for gen in self.generators])
+
+    def randn_like(self, input):
+        return self.randn(input.shape, dtype=input.dtype, layout=input.layout, device=input.device)
+
+    def randint(self, *args, size, **kwargs):
+        assert size[0] == len(self.generators)
+        return torch.stack(
+            [torch.randint(*args, size=size[1:], generator=gen, **kwargs) for gen in self.generators]
+        )
+
+
 def load_model(network_path: str, device: torch.device) -> Module:
     """
     Loads a pretrained model from given path. This function loads the model from the original
@@ -36,6 +60,15 @@ def copy_weights(original: Module, clone: Module) -> None:
     Copies weights from `original` to `clone`.
     """
     clone.load_state_dict(original.state_dict())
+
+
+def encode_labels(class_ids: torch.Tensor, label_dim: int) -> torch.Tensor:
+    batch_size = class_ids.shape[-1]
+    class_labels = None
+    if label_dim:
+        class_labels = torch.zeros((batch_size, label_dim), device=class_ids.device)
+        class_labels[:, class_ids] = 1
+    return class_labels
 
 
 def get_sigmas_karras(n, sigma_min, sigma_max, rho=7.0, device="cpu"):
@@ -66,6 +99,6 @@ def forward_diffusion(
         noise = torch.randn_like(x, device=x.device)
 
     sigma = get_sigmas_karras(n, sigma_min=0.002, sigma_max=80, rho=7.0, device=x.device)  # N, N-1, ..., 0
-    ns = noise * sigma[-t, None, None, None]  # broadcast for scalar product
+    ns = noise * sigma[-(t+1), None, None, None]  # broadcast for scalar product
     noisy_x = x + ns
-    return noisy_x, sigma[-t]
+    return noisy_x, sigma[-(t+1)]

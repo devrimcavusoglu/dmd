@@ -24,33 +24,9 @@ import PIL.Image
 import torch
 import tqdm
 
-from dmd.modeling_utils import load_model
+from dmd.modeling_utils import load_model, StackedRandomGenerator, encode_labels
 from dmd.sampler import edm_sampler
 from dmd.torch_utils import distributed as dist
-
-
-class StackedRandomGenerator:
-    """
-    Wrapper for torch.Generator that allows specifying a different random seed
-    for each sample in a minibatch.
-    """
-
-    def __init__(self, device, seeds):
-        super().__init__()
-        self.generators = [torch.Generator(device).manual_seed(int(seed) % (1 << 32)) for seed in seeds]
-
-    def randn(self, size, **kwargs):
-        assert size[0] == len(self.generators)
-        return torch.stack([torch.randn(size[1:], generator=gen, **kwargs) for gen in self.generators])
-
-    def randn_like(self, input):
-        return self.randn(input.shape, dtype=input.dtype, layout=input.layout, device=input.device)
-
-    def randint(self, *args, size, **kwargs):
-        assert size[0] == len(self.generators)
-        return torch.stack(
-            [torch.randint(*args, size=size[1:], generator=gen, **kwargs) for gen in self.generators]
-        )
 
 
 @dataclasses.dataclass
@@ -159,9 +135,9 @@ class EDMGenerator:
     ):
         images_np = (images * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).cpu().numpy()
         images_output_dir = Path(output_dir)
+        if class_idx is not None:
+            images_output_dir = images_output_dir / f"class_{class_idx}"
         for seed, image_np in zip(batch_seeds, images_np):
-            if class_idx is not None:
-                images_output_dir = images_output_dir / f"class_{class_idx}"
             images_dir = (
                 os.path.join(images_output_dir, f"{seed - seed % 1000:06d}") if subdirs else images_output_dir
             )
@@ -286,14 +262,8 @@ class EDMGenerator:
             [batch_size, self.model.img_channels, self.model.img_resolution, self.model.img_resolution],
             device=device,
         )
-        class_labels = None
-        if self.model.label_dim:
-            class_labels = torch.eye(self.model.label_dim, device=device)[
-                rnd.randint(self.model.label_dim, size=[batch_size], device=device)
-            ]
-        if class_idx is not None:
-            class_labels[:, :] = 0
-            class_labels[:, class_idx] = 1
+        class_ids = torch.tensor([class_idx] * batch_size, device=device)
+        class_labels = encode_labels(class_ids, self.model.label_dim)
 
         # Generate images.
         images = edm_sampler(
@@ -311,3 +281,27 @@ class EDMGenerator:
             randn_like=rnd.randn_like,
         )
         return latents, images
+
+
+if __name__ == "__main__":
+    edm_generator = EDMGenerator(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
+                                 device="cuda")
+    edm_generator(
+            "/home/devrim/lab/gh/ms/dmd/data/toy",
+            seeds=list(range(10)),
+            class_idx=0,
+            batch_size=64,
+            save_format="images"
+    )
+
+    # model = load_model(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
+    #                              device=torch.device("cuda"))
+    # x = torch.randn((1, 3, 32, 32), device=torch.device("cuda"))
+    # sigmas = get_sigmas_karras(1000, 0.002, 80, device="cuda")
+    # labels = torch.zeros((1,10), device=torch.device("cuda"))
+    # labels[0,0] = 1
+    # x_hat = model(x, sigmas[-750], labels)
+    # d_cur = (x_hat - denoised) / t_hat
+    # x_next = x_hat + (t_next - t_hat) * d_cur
+    # im = (((x[0] - y[0]) * 1) * 127.5).permute(1,2,0).cpu().numpy().astype(np.uint8)
+    # PIL.Image.fromarray(im).show()

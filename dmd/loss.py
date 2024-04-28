@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from piq import LPIPS
 from torch.nn import Module
 from torch.nn.modules.loss import _Loss
+from torchvision.transforms import Resize
 
 from dmd.modeling_utils import forward_diffusion
 
@@ -29,7 +30,7 @@ class DistributionMatchingLoss(_Loss):
             pred_fake_image = mu_fake(noisy_x, sigma_t)
             pred_real_image = mu_real(noisy_x, sigma_t)
 
-        weighting_factor = torch.abs(x - pred_real_image).mean(dim=[1, 2, 3], keepdim=True) / (c*w*h*sigma_t)
+        weighting_factor = torch.abs(x - pred_real_image).mean(dim=[1, 2, 3], keepdim=True)  # / (sigma_t**2) Eqn. 8
         grad = (pred_fake_image - pred_real_image) / weighting_factor
         diff = (x - grad).detach()  # stop-gradient
         return 0.5 * F.mse_loss(x, diff, reduction=self.reduction)
@@ -44,6 +45,13 @@ class GeneratorLoss(_Loss):
 
     def forward(self, mu_real: Module, mu_fake: Module, x: torch.Tensor, x_ref: torch.Tensor, y_ref: torch.Tensor) -> torch.Tensor:
         loss_kl = self.dmd_loss(mu_real, mu_fake, x)
+
+        # Apply preprocessing
+        x_ref = (x_ref + 1) / 2.0
+        y_ref = (y_ref + 1) / 2.0
+        transform = Resize(224)
+        x_ref = transform(x_ref)
+        y_ref = transform(y_ref)
         loss_reg = self.lpips(x_ref, y_ref)
         return loss_kl + self.lambda_reg * loss_reg
 
@@ -54,7 +62,10 @@ class DenoisingLoss(_Loss):
     "One-step Diffusion with Distribution Matching Distillation".
     """
 
-    def forward(self, pred_fake_image: torch.Tensor, x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    def forward(self, mu_fake: Module, x: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor:
+        # Algorithm SNR + 1 / sigma_data^2 for EDM (sigma_data = 0.5)
+        pred_fake_image = mu_fake(x, sigma)
+        weight = 1 / sigma ** 2 + 1 / mu_fake.sigma_data ** 2
         return torch.mean(weight[:, None, None, None] * (pred_fake_image - x) ** 2)
 
 
@@ -63,23 +74,21 @@ if __name__ == "__main__":
 
     from dmd.modeling_utils import load_model
 
-    # loss = GeneratorLoss()
+    loss = DistributionMatchingLoss(1000)
     device = torch.device("cuda")
-    # im1, lt1 = np.load("/home/devrim/lab/gh/dmd/data/distillation_dataset/samples/000000.npy")
-    # im2, lt2 = np.load("/home/devrim/lab/gh/dmd/data/distillation_dataset/samples/000003.npy")
-    # print(im1.shape, lt1.shape)
-    # images = torch.from_numpy(np.stack([im1, im2], axis=0)).to(device)
-    # latents = torch.from_numpy(np.stack([lt1, lt2], axis=0)).to(device)
+    im1, lt1 = np.load("/home/devrim/lab/gh/ms/dmd/data/distillation_dataset/samples/000000.npy")
+    im2, lt2 = np.load("/home/devrim/lab/gh/ms/dmd/data/distillation_dataset/samples/000003.npy")
+    print(im1.shape, lt1.shape)
+    images = torch.from_numpy(np.stack([im1, im2], axis=0)).to(device)
+    latents = torch.from_numpy(np.stack([lt1, lt2], axis=0)).to(device)
+    print(latents.min(), latents.max(), latents.std())
     # numpy_to_pil(im1).show()
     # numpy_to_pil(im2).show()
     # numpy_to_pil(lt1).show()
     # numpy_to_pil(lt2).show()
-    x = torch.randn(16, 3, 32, 32, device=device)  # B,C,W,H
+    # x = torch.randn(16, 3, 32, 32, device=device)  # B,C,W,H
     # mu_real = load_model(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl", device=device)
-    # mu_fake = load_model(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
-    #                      device=device)
-    # mu_real(latents)
-    # l = loss(mu_real, mu_fake, images)
-    loss = LPIPS()
-    l = loss(x, x + x**2)
-    print(l.item())
+    # # mu_fake = load_model(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
+    # #                      device=device)
+    # loss(mu_real, mu_real, images)
+
