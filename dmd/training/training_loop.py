@@ -7,7 +7,6 @@
 
 """Main training loop."""
 import math
-import os
 import sys
 from contextlib import suppress
 from pathlib import Path
@@ -18,12 +17,9 @@ import torch
 from neptune import Run
 from torch.nn.modules.loss import _Loss as TorchLoss
 from torch.nn.utils import clip_grad_norm_
-from torch.optim import AdamW
 from torch.utils.data import DataLoader
 
-from dmd.dataset.cifar_pairs import CIFARPairs
-from dmd.loss import DenoisingLoss, GeneratorLoss
-from dmd.modeling_utils import encode_labels, forward_diffusion, load_model
+from dmd.modeling_utils import encode_labels, forward_diffusion
 from dmd.utils.logging import MetricLogger
 
 
