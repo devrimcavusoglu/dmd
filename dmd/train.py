@@ -50,6 +50,7 @@ def train(
     mu_fake: torch.nn.Module,
     mu_real: torch.nn.Module,
     data_loader_train: DataLoader,
+    data_loader_test: DataLoader,
     loss_g: TorchLoss,
     loss_d: TorchLoss,
     optimizer_g: torch.optim.Optimizer,
@@ -79,6 +80,7 @@ def train(
             mu_fake,
             mu_real,
             data_loader_train,
+            data_loader_test,
             loss_g,
             loss_d,
             optimizer_g,
@@ -126,10 +128,12 @@ def train(
 
 def run(
     model_path: str,
-    data_path: str,
+    train_data_path: str,
+    test_data_path: str,
     output_dir: str,
     epochs: int,
     batch_size: int = 56,
+    eval_batch_size: int = 128,
     num_workers: int = 10,
     lr: float = 5e-5,
     weight_decay: float = 0.01,
@@ -164,9 +168,13 @@ def run(
         max_norm (Optional[float]): Maximum norm of the gradients. [default: 10.0]
     """
     # Prepare dataloader
-    data_path = Path(data_path).resolve()
-    training_dataset = CIFARPairs(data_path)
+    train_data_path = Path(train_data_path).resolve()
+    test_data_path = Path(test_data_path).resolve()
+    training_dataset = CIFARPairs(train_data_path)
     train_loader = DataLoader(training_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+
+    test_dataset = CIFARPairs(test_data_path)
+    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False, num_workers=num_workers)
 
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -190,7 +198,8 @@ def run(
 
         neptune_run["training_args"] = {
             "model_path": model_path,
-            "data_path": data_path,
+            "train_data_path": train_data_path,
+            "test_data_path": test_data_path,
             "output_dir": output_dir,
             "epochs": epochs,
             "batch_size": batch_size,
@@ -211,6 +220,7 @@ def run(
         mu_real=mu_real,
         mu_fake=mu_fake,
         data_loader_train=train_loader,
+        data_loader_test=test_loader,
         device=device,
         loss_g=generator_loss,
         loss_d=diffusion_loss,

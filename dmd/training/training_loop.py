@@ -55,7 +55,8 @@ def train_one_epoch(
     generator: torch.nn.Module,
     mu_fake: torch.nn.Module,
     mu_real: torch.nn.Module,
-    data_loader: DataLoader,
+    data_loader_train: DataLoader,
+    data_loader_test: DataLoader,
     loss_g: TorchLoss,
     loss_d: TorchLoss,
     optimizer_g: torch.optim.Optimizer,
@@ -85,7 +86,7 @@ def train_one_epoch(
     im_save_freq = 300
 
     i = 0
-    for pairs in metric_logger.log_every(data_loader, print_freq, header):
+    for pairs in metric_logger.log_every(data_loader_train, print_freq, header):
         y_ref = pairs["image"].to(device, non_blocking=True).to(torch.float32).clip(-1, 1)
         z_ref = pairs["latent"].to(device, non_blocking=True).to(torch.float32)
         z = torch.randn_like(y_ref, device=device)
