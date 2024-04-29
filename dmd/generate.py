@@ -24,7 +24,7 @@ import PIL.Image
 import torch
 import tqdm
 
-from dmd.modeling_utils import load_model, StackedRandomGenerator, encode_labels
+from dmd.modeling_utils import StackedRandomGenerator, encode_labels, load_model
 from dmd.sampler import edm_sampler
 from dmd.torch_utils import distributed as dist
 
@@ -284,14 +284,16 @@ class EDMGenerator:
 
 
 if __name__ == "__main__":
-    edm_generator = EDMGenerator(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
-                                 device="cuda")
+    edm_generator = EDMGenerator(
+        network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
+        device="cuda",
+    )
     edm_generator(
-            "/home/devrim/lab/gh/ms/dmd/data/toy",
-            seeds=list(range(10)),
-            class_idx=0,
-            batch_size=64,
-            save_format="images"
+        "/home/devrim/lab/gh/ms/dmd/data/toy",
+        seeds=list(range(10)),
+        class_idx=0,
+        batch_size=64,
+        save_format="images",
     )
 
     # model = load_model(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",

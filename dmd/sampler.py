@@ -43,7 +43,7 @@ def edm_sampler(
         # Increase noise temporarily.
         gamma = min(S_churn / steps, np.sqrt(2) - 1) if S_min <= t_cur <= S_max else 0
         t_hat = net.round_sigma(t_cur + gamma * t_cur)
-        x_hat = x_cur + (t_hat ** 2 - t_cur ** 2).sqrt() * S_noise * randn_like(x_cur)
+        x_hat = x_cur + (t_hat**2 - t_cur**2).sqrt() * S_noise * randn_like(x_cur)
 
         # Euler step.
         denoised = net(x_hat, t_hat, class_labels).to(torch.float64)

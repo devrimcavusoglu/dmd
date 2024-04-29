@@ -13,12 +13,12 @@ class DistributionMatchingLoss(_Loss):
     Loss function for DMD (Algorithm 2) proposed in
     "One-step Diffusion with Distribution Matching Distillation".
     """
+
     def __init__(self, timesteps: int, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.timesteps = timesteps
 
-    def forward(
-        self, mu_real: Module, mu_fake: Module, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, mu_real: Module, mu_fake: Module, x: torch.Tensor) -> torch.Tensor:
         b, c, w, h = x.shape
 
         # In practice T_min, T_max choices follows DreamFusion as follows
@@ -30,7 +30,9 @@ class DistributionMatchingLoss(_Loss):
             pred_fake_image = mu_fake(noisy_x, sigma_t)
             pred_real_image = mu_real(noisy_x, sigma_t)
 
-        weighting_factor = torch.abs(x - pred_real_image).mean(dim=[1, 2, 3], keepdim=True)  # / (sigma_t**2) Eqn. 8
+        weighting_factor = torch.abs(x - pred_real_image).mean(
+            dim=[1, 2, 3], keepdim=True
+        )  # / (sigma_t**2) Eqn. 8
         grad = (pred_fake_image - pred_real_image) / weighting_factor
         diff = (x - grad).detach()  # stop-gradient
         return 0.5 * F.mse_loss(x, diff, reduction=self.reduction)
@@ -43,7 +45,9 @@ class GeneratorLoss(_Loss):
         self.lpips = LPIPS()
         self.lambda_reg = lambda_reg
 
-    def forward(self, mu_real: Module, mu_fake: Module, x: torch.Tensor, x_ref: torch.Tensor, y_ref: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, mu_real: Module, mu_fake: Module, x: torch.Tensor, x_ref: torch.Tensor, y_ref: torch.Tensor
+    ) -> torch.Tensor:
         loss_kl = self.dmd_loss(mu_real, mu_fake, x)
 
         # Apply preprocessing
@@ -65,7 +69,7 @@ class DenoisingLoss(_Loss):
     def forward(self, mu_fake: Module, x: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor:
         # Algorithm SNR + 1 / sigma_data^2 for EDM (sigma_data = 0.5)
         pred_fake_image = mu_fake(x, sigma)
-        weight = 1 / sigma ** 2 + 1 / mu_fake.sigma_data ** 2
+        weight = 1 / sigma**2 + 1 / mu_fake.sigma_data**2
         return torch.mean(weight[:, None, None, None] * (pred_fake_image - x) ** 2)
 
 
@@ -91,4 +95,3 @@ if __name__ == "__main__":
     # # mu_fake = load_model(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
     # #                      device=device)
     # loss(mu_real, mu_real, images)
-

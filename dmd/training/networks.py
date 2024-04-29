@@ -705,7 +705,7 @@ class VPPrecond(torch.nn.Module):
 
         c_skip = 1
         c_out = -sigma
-        c_in = 1 / (sigma ** 2 + 1).sqrt()
+        c_in = 1 / (sigma**2 + 1).sqrt()
         c_noise = (self.M - 1) * self.sigma_inv(sigma)
 
         F_x = self.model((c_in * x).to(dtype), c_noise.flatten(), class_labels=class_labels, **model_kwargs)
@@ -715,12 +715,12 @@ class VPPrecond(torch.nn.Module):
 
     def sigma(self, t):
         t = torch.as_tensor(t)
-        return ((0.5 * self.beta_d * (t ** 2) + self.beta_min * t).exp() - 1).sqrt()
+        return ((0.5 * self.beta_d * (t**2) + self.beta_min * t).exp() - 1).sqrt()
 
     def sigma_inv(self, sigma):
         sigma = torch.as_tensor(sigma)
         return (
-            (self.beta_min ** 2 + 2 * self.beta_d * (1 + sigma ** 2).log()).sqrt() - self.beta_min
+            (self.beta_min**2 + 2 * self.beta_d * (1 + sigma**2).log()).sqrt() - self.beta_min
         ) / self.beta_d
 
     def round_sigma(self, sigma):
@@ -843,7 +843,7 @@ class iDDPMPrecond(torch.nn.Module):
 
         c_skip = 1
         c_out = -sigma
-        c_in = 1 / (sigma ** 2 + 1).sqrt()
+        c_in = 1 / (sigma**2 + 1).sqrt()
         c_noise = self.M - 1 - self.round_sigma(sigma, return_index=True).to(torch.float32)
 
         F_x = self.model((c_in * x).to(dtype), c_noise.flatten(), class_labels=class_labels, **model_kwargs)
@@ -911,9 +911,9 @@ class EDMPrecond(torch.nn.Module):
         )
         dtype = torch.float16 if (self.use_fp16 and not force_fp32 and x.device.type == "cuda") else torch.float32
 
-        c_skip = self.sigma_data ** 2 / (sigma ** 2 + self.sigma_data ** 2)
-        c_out = sigma * self.sigma_data / (sigma ** 2 + self.sigma_data ** 2).sqrt()
-        c_in = 1 / (self.sigma_data ** 2 + sigma ** 2).sqrt()
+        c_skip = self.sigma_data**2 / (sigma**2 + self.sigma_data**2)
+        c_out = sigma * self.sigma_data / (sigma**2 + self.sigma_data**2).sqrt()
+        c_in = 1 / (self.sigma_data**2 + sigma**2).sqrt()
         c_noise = sigma.log() / 4
 
         F_x = self.model((c_in * x).to(dtype), c_noise.flatten(), class_labels=class_labels, **model_kwargs)

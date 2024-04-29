@@ -38,7 +38,30 @@ bash scripts/download_data.sh
 ```
 
 ## Training
-WIP.
+
+Start training by running
+
+```shell
+python -m dmd train --model-path https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl --data-path /home/devrim/lab/gh/ms/dmd/data/distillation_dataset_h5/cifar.hdf5 --output-dir /home/devrim/lab/gh/ms/dmd/data/toy --epochs 2 --batch-size 32 --log-neptune
+```
+
+To see all training arguments run
+
+```shell
+python -m dmd train --help
+```
+
+### Logging to Neptune
+
+Create a `neptune.cfg` file in the project root. The file content should look like this:
+
+```ini
+[credentials]
+project=<project-name>
+token=<replace-with-your-token>
+```
+
+Then, you can use `--log-neptune` flag to automatically log metrics to your neptune project.
 
 ## Generation
 WIP.

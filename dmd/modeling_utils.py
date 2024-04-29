@@ -99,6 +99,6 @@ def forward_diffusion(
         noise = torch.randn_like(x, device=x.device)
 
     sigma = get_sigmas_karras(n, sigma_min=0.002, sigma_max=80, rho=7.0, device=x.device)  # N, N-1, ..., 0
-    ns = noise * sigma[-(t+1), None, None, None]  # broadcast for scalar product
+    ns = noise * sigma[-(t + 1), None, None, None]  # broadcast for scalar product
     noisy_x = x + ns
-    return noisy_x, sigma[-(t+1)]
+    return noisy_x, sigma[-(t + 1)]

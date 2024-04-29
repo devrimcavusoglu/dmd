@@ -16,21 +16,21 @@ from typing import Optional
 import PIL.Image
 import torch
 from neptune import Run
+from torch.nn.modules.loss import _Loss as TorchLoss
 from torch.nn.utils import clip_grad_norm_
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from torch.nn.modules.loss import _Loss as TorchLoss
 
 from dmd.dataset.cifar_pairs import CIFARPairs
-from dmd.loss import GeneratorLoss, DenoisingLoss
-from dmd.modeling_utils import load_model, forward_diffusion, encode_labels
+from dmd.loss import DenoisingLoss, GeneratorLoss
+from dmd.modeling_utils import encode_labels, forward_diffusion, load_model
 from dmd.utils.logging import MetricLogger
 
 
 def _save_array_as_images(
-        output_dir: str,
-        images: torch.Tensor,
-        prefix: str,
+    output_dir: str,
+    images: torch.Tensor,
+    prefix: str,
 ):
     images_np = (images * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).cpu().numpy()
     images_output_dir = Path(output_dir)
@@ -65,13 +65,16 @@ def train_one_epoch(
     optimizer_d: torch.optim.Optimizer,
     device: torch.device,
     epoch: int,
-    # loss_scaler,
+    *,
+    output_dir: str = None,
     max_norm: float = 10,
-    model_ema: Optional = None,
     amp_autocast=None,
     neptune_run: Optional[Run] = None,
 ):
     amp_autocast = amp_autocast or suppress
+    output_dir = Path(output_dir)
+    images_dir = output_dir / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
 
     # Set G and mu_fake to train mode, mu_real should be frozen
     generator.requires_grad_(True).train()
@@ -82,7 +85,7 @@ def train_one_epoch(
     # metric_logger.add_meter("lr", SmoothedValue(window_size=1, fmt="{value:.6f}"))
     header = "Epoch: [{}]".format(epoch)
     print_freq = 10
-    im_save_freq = 50
+    im_save_freq = 300
 
     i = 0
     for pairs in metric_logger.log_every(data_loader, print_freq, header):
@@ -114,6 +117,7 @@ def train_one_epoch(
 
         update_parameters(generator, l_g, optimizer_g, max_norm)
         torch.cuda.synchronize()
+        metric_logger.log_neptune("loss_g", l_g.item())
 
         with amp_autocast():
             # Update mu_fake
@@ -126,17 +130,19 @@ def train_one_epoch(
 
         update_parameters(mu_fake, l_d, optimizer_d, max_norm)
         torch.cuda.synchronize()
+        metric_logger.log_neptune("loss_d", l_d.item())
 
         if i % im_save_freq == 0:
-            output_dir = Path("/home/devrim/lab/gh/ms/dmd/data/toy") / f"iter_{i}"
-            _save_array_as_images(output_dir.as_posix(), x, "x")
-            _save_array_as_images(output_dir.as_posix(), x_ref, "x_ref")
+            images_iter_dir = images_dir / f"iter_{i}"
+            images_iter_dir.mkdir(exist_ok=True)
+            _save_array_as_images(images_iter_dir.as_posix(), x, "x")
+            _save_array_as_images(images_iter_dir.as_posix(), x_ref, "x_ref")
             with torch.no_grad():
                 real_pred = mu_real(x_t, sigma_t, class_labels=class_ids)
                 fake_pred = mu_fake(x_t, sigma_t, class_labels=class_ids)
-            _save_array_as_images(output_dir.as_posix(), real_pred, "x_real")
-            _save_array_as_images(output_dir.as_posix(), fake_pred, "x_fake")
-            _save_array_as_images(output_dir.as_posix(), y_ref, "y_ref")
+            _save_array_as_images(images_iter_dir.as_posix(), real_pred, "x_real")
+            _save_array_as_images(images_iter_dir.as_posix(), fake_pred, "x_fake")
+            _save_array_as_images(images_iter_dir.as_posix(), y_ref, "y_ref")
 
         # if model_ema is not None:
         #     model_ema.update(model)
@@ -148,23 +154,3 @@ def train_one_epoch(
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-
-
-if __name__ == "__main__":
-    data_path = "/home/devrim/lab/gh/ms/dmd/data/distillation_dataset_h5/cifar.hdf5"
-    network_path = "https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl"
-    device = torch.device("cuda")
-    dataset = CIFARPairs(data_path)
-    # TODO: BS -> 64
-    dataloader = DataLoader(dataset, batch_size=4, shuffle=False)
-    mu_real = load_model(network_path=network_path, device=device)
-    mu_fake = load_model(network_path=network_path, device=device)
-    generator = load_model(network_path=network_path, device=device)
-
-    generator_loss = GeneratorLoss()
-    diffusion_loss = DenoisingLoss()
-
-    generator_optimizer = AdamW(params=generator.parameters(), lr=2e-4, weight_decay=0.01, betas=(0.9, 0.999))
-    diffuser_optimizer = AdamW(params=mu_fake.parameters(), lr=2e-4, weight_decay=0.01, betas=(0.9, 0.999))
-    train_one_epoch(generator, mu_fake, mu_real, dataloader, generator_loss, diffusion_loss, generator_optimizer,
-                    diffuser_optimizer, device, 1)

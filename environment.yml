@@ -20,7 +20,7 @@ dependencies:
   - tqdm
   - torchvision
   - pip:
-    - black==21.7b0
+    - black==22.3.0
     - deepdiff==6.7.1
     - flake8==3.9.2
     - fire

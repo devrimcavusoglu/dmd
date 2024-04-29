@@ -24,7 +24,7 @@ def convert_json_to_h5(data_path: Union[str, Path]) -> None:
     h5_dataset_folder = data_path.parent / f"{data_path.stem}_h5"
     h5_dataset_folder.mkdir(exist_ok=True)
     h5_dataset_path = h5_dataset_folder / "cifar.hdf5"
-    hf = h5py.File(h5_dataset_path, 'w')
+    hf = h5py.File(h5_dataset_path, "w")
 
     for i in tqdm(range(num_samples)):
         sample_dict = annotations_dict["data"][i]
@@ -36,13 +36,14 @@ def convert_json_to_h5(data_path: Union[str, Path]) -> None:
 
         h5_sample_path = f"/data/{iid}"
         hf[h5_sample_path] = pairs
-        hf[h5_sample_path].attrs['class_idx'] = class_idx
-        hf[h5_sample_path].attrs['seed'] = seed
+        hf[h5_sample_path].attrs["class_idx"] = class_idx
+        hf[h5_sample_path].attrs["seed"] = seed
 
     hf.close()
 
 
 if __name__ == "__main__":
     from utils import DATA_DIR
+
     data_path = DATA_DIR / "distillation_dataset"
     convert_json_to_h5(data_path=data_path)
