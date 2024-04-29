@@ -1,26 +1,30 @@
 name: dmd
 channels:
-  - pytorch
+  - conda-forge
   - nvidia
+  - photosynthesis-team
+  - pytorch
 dependencies:
   - python>=3.8, < 3.10  # package build failures on 3.10
-  - pip
-  - numpy>=1.20
   - click>=8.0
-  - pillow>=8.3.1
-  - scipy>=1.7.1
-  - pytorch=1.12.1
-  - psutil
-  - requests
-  - tqdm
-  - imageio
   - h5py
+  - imageio
+  - numpy>=1.20
+  - pillow>=8.3.1
+  - pip
+  - piq
+  - psutil
+  - pytorch=1.12.1
+  - requests
+  - scipy>=1.7.1
+  - tqdm
+  - torchvision
   - pip:
-    - black==21.7b0
-    - click==8.0.4
+    - black==22.3.0
     - deepdiff==6.7.1
     - flake8==3.9.2
     - fire
     - imageio-ffmpeg>=0.4.3
     - isort==5.9.2
+    - neptune
     - pyspng

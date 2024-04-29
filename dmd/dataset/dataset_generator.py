@@ -31,15 +31,17 @@ def generate_distillation_dataset(
             class_idx=cls,
             batch_size=batch_size,
             save_format="pairs",
-            save_start_idx=instance_id
+            save_start_idx=instance_id,
         )
-        for iid in range(instance_id, instance_id+len(seeds)):
-            annotations["data"].append({
-                "pairs_path": f"samples/{iid:06d}.npy",
-                "class_idx": cls,
-                "seed": instance_id % len(seeds),
-                "iid": instance_id
-            })
+        for iid in range(instance_id, instance_id + len(seeds)):
+            annotations["data"].append(
+                {
+                    "pairs_path": f"samples/{iid:06d}.npy",
+                    "class_idx": cls,
+                    "seed": instance_id % len(seeds),
+                    "iid": instance_id,
+                }
+            )
             instance_id += 1
     with open(output_dir / "annotations.json", "w") as f:
         json.dump(annotations, f)

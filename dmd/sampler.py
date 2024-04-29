@@ -8,27 +8,7 @@
 import numpy as np
 import torch
 
-from dmd.utils.array import torch_to_pillow
-
-
-def get_sigmas_karras(n, sigma_min, sigma_max, rho=7.0, device="cpu"):
-    """
-    Constructs the noise schedule of Karras et al. (2022).
-    Taken from openai/consistency_models
-    https://github.com/openai/consistency_models/blob/e32b69ee436d518377db86fb2127a3972d0d8716/cm/karras_diffusion.py#L422
-    """
-
-    def append_zero(x):
-        """
-        Appends zero to the end of the input array.
-        """
-        return torch.cat([x, x.new_zeros([1])])
-
-    ramp = torch.linspace(0, 1, n)
-    min_inv_rho = sigma_min ** (1 / rho)
-    max_inv_rho = sigma_max ** (1 / rho)
-    sigmas = (max_inv_rho + ramp * (min_inv_rho - max_inv_rho)) ** rho
-    return append_zero(sigmas).to(device)
+from dmd.modeling_utils import get_sigmas_karras
 
 
 def edm_sampler(
@@ -63,7 +43,7 @@ def edm_sampler(
         # Increase noise temporarily.
         gamma = min(S_churn / steps, np.sqrt(2) - 1) if S_min <= t_cur <= S_max else 0
         t_hat = net.round_sigma(t_cur + gamma * t_cur)
-        x_hat = x_cur + (t_hat ** 2 - t_cur ** 2).sqrt() * S_noise * randn_like(x_cur)
+        x_hat = x_cur + (t_hat**2 - t_cur**2).sqrt() * S_noise * randn_like(x_cur)
 
         # Euler step.
         denoised = net(x_hat, t_hat, class_labels).to(torch.float64)
@@ -77,19 +57,3 @@ def edm_sampler(
             x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
 
     return x_next
-
-
-if __name__ == "__main__":
-    from dmd.modeling_utils import load_model
-
-
-    device = torch.device("cuda")
-    latents = torch.randn(1,3,32,32, device=device)
-    mu_real = load_model(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
-                         device=device)
-    samples = edm_sampler(
-            mu_real,
-            latents=latents,
-    )
-    torch_to_pillow(samples, 0).show()
-
