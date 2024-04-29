@@ -10,9 +10,8 @@ import math
 import sys
 from contextlib import suppress
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
-import PIL.Image
 import torch
 from neptune import Run
 from torch.nn.modules.loss import _Loss as TorchLoss
@@ -20,23 +19,25 @@ from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
 
 from dmd.modeling_utils import encode_labels, forward_diffusion
+from dmd.utils.array import torch_to_pillow
+from dmd.utils.common import image_grid
 from dmd.utils.logging import MetricLogger
 
 
-def _save_array_as_images(
+def _save_intermediate_images(
     output_dir: str,
-    images: torch.Tensor,
+    all_images: List[torch.Tensor],
     prefix: str,
 ):
-    images_np = (images * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).cpu().numpy()
+    pims = []
+    for images in all_images:
+        pims.extend(torch_to_pillow(images))
+    grid = image_grid(pims, rows=len(all_images), cols=all_images[0].shape[0])
     images_output_dir = Path(output_dir)
     images_output_dir.mkdir(exist_ok=True, parents=True)
-    for i, image_np in enumerate(images_np):
-        image_path = images_output_dir / f"{prefix}_{i:06d}.png"
-        if image_np.shape[2] == 1:
-            PIL.Image.fromarray(image_np[:, :, 0], "L").save(image_path)
-        else:
-            PIL.Image.fromarray(image_np, "RGB").save(image_path)
+    image_path = images_output_dir / f"{prefix}.png"
+    grid.save(image_path)
+    return grid
 
 
 def update_parameters(model, loss, optimizer, max_norm):
@@ -129,16 +130,13 @@ def train_one_epoch(
         metric_logger.log_neptune("loss_d", l_d.item())
 
         if i % im_save_freq == 0:
-            images_iter_dir = images_dir / f"iter_{i}"
-            images_iter_dir.mkdir(exist_ok=True)
-            _save_array_as_images(images_iter_dir.as_posix(), x, "x")
-            _save_array_as_images(images_iter_dir.as_posix(), x_ref, "x_ref")
+            images_epoch_dir = images_dir / f"epoch_{epoch}"
+            images_epoch_dir.mkdir(exist_ok=True)
             with torch.no_grad():
                 real_pred = mu_real(x_t, sigma_t, class_labels=class_ids)
                 fake_pred = mu_fake(x_t, sigma_t, class_labels=class_ids)
-            _save_array_as_images(images_iter_dir.as_posix(), real_pred, "x_real")
-            _save_array_as_images(images_iter_dir.as_posix(), fake_pred, "x_fake")
-            _save_array_as_images(images_iter_dir.as_posix(), y_ref, "y_ref")
+            grid = _save_intermediate_images(images_epoch_dir, [x, x_ref, real_pred, fake_pred, y_ref], "iter_0")
+            metric_logger.log_neptune(f"train/images/epoch_{0}", grid)
 
         # if model_ema is not None:
         #     model_ema.update(model)
