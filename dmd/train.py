@@ -63,6 +63,7 @@ def train(
     cudnn_benchmark: bool = True,
     is_distributed: bool = False,
 ):
+    output_dir = Path(output_dir)
     print(f"Start training for {epochs} epochs")
     start_time = time.time()
     max_accuracy = 0.0
