@@ -107,7 +107,7 @@ def train_one_epoch(
             sigmas = torch.tensor([80.0] * z.shape[0], device=device)
             x = generator(z, sigmas, class_labels=class_ids)
             x_ref = generator(z_ref, sigmas, class_labels=class_ids)
-            l_g = loss_g(mu_real, mu_fake, x, x_ref, y_ref)
+            l_g = loss_g(mu_real, mu_fake, x, x_ref, y_ref, class_ids)
             if not math.isfinite(l_g.item()):
                 print(f"Generator Loss is {l_g.item()}, stopping training")
                 sys.exit(1)
@@ -120,7 +120,7 @@ def train_one_epoch(
             # Update mu_fake
             t = torch.randint(1, 1000, [x.shape[0]])  # t ~ DU(1,1000) as t=0 leads 1/0^2 -> inf
             x_t, sigma_t = forward_diffusion(x.detach(), t)  # stop grad
-            l_d = loss_d(mu_fake, x.detach(), sigma_t)
+            l_d = loss_d(mu_fake, x.detach(), sigma_t, class_ids)
             if not math.isfinite(l_d.item()):
                 print(f"Diffusion Loss is {l_d.item()}, stopping training")
                 sys.exit(1)
