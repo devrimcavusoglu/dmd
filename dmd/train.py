@@ -67,6 +67,8 @@ def train(
     neptune_run: Optional[Run] = None,
     cudnn_benchmark: bool = True,
     is_distributed: bool = False,
+    print_freq: int = 10,
+    im_save_freq: int = 300
 ):
     output_dir = Path(output_dir)
     print(f"Start training for {epochs} epochs")
@@ -94,7 +96,9 @@ def train(
             max_norm=max_norm,
             amp_autocast=amp_autocast,
             neptune_run=neptune_run,
-            output_dir=output_dir,
+            output_dir=output_dir.as_posix(),
+            print_freq=print_freq,
+            im_save_freq=im_save_freq
         )
 
         # lr_scheduler.step(epoch)
@@ -148,6 +152,8 @@ def run(
     cudnn_benchmark: bool = True,
     amp_autocast: Optional = None,
     max_norm: float = 10.0,
+    print_freq: int = 10,
+    im_save_freq: int = 300,
 ) -> None:
     """
     Starts the training phase.
@@ -170,6 +176,8 @@ def run(
         cudnn_benchmark (bool): Whether to use CUDNN benchmark. [default: True]
         amp_autocast (Optional): Whether to use AMP autocast. [default: None]
         max_norm (Optional[float]): Maximum norm of the gradients. [default: 10.0]
+        print_freq (int): Print frequency for metric report. [default: 10]
+        im_save_freq (int): Frequency to save image grids. [default: 300]
     """
     # Prepare dataloader
     data_path = Path(data_path).resolve()
@@ -209,11 +217,13 @@ def run(
             "weight_decay": weight_decay,
             "betas": betas,
             "dmd_loss_timesteps": dmd_loss_timesteps,
-            "dmd_loss_lambda": dmd_loss_lambda,
+            "dmd_loss_lambda": float(dmd_loss_lambda),
             "device": str(device),
             "cudnn_benchmark": cudnn_benchmark,
             "amp_autocast": amp_autocast,
             "max_norm": max_norm,
+            "print_freq": print_freq,
+            "im_save_freq": im_save_freq
         }
 
     # start training
@@ -234,6 +244,8 @@ def run(
         cudnn_benchmark=cudnn_benchmark,
         amp_autocast=amp_autocast,
         max_norm=max_norm,
+        print_freq=print_freq,
+        im_save_freq=im_save_freq
     )
 
     if neptune_run:
