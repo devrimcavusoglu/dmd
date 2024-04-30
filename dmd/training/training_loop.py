@@ -120,8 +120,7 @@ def train_one_epoch(
         with amp_autocast():
             # Update mu_fake
             t = torch.randint(1, 1000, [x.shape[0]])  # t ~ DU(1,1000) as t=0 leads 1/0^2 -> inf
-            x_t, sigma_t = forward_diffusion(x.detach(), t)  # stop grad
-            l_d = loss_d(mu_fake, x.detach(), sigma_t, class_ids)
+            l_d = loss_d(mu_fake, x, t, class_ids)
             if not math.isfinite(l_d.item()):
                 print(f"Diffusion Loss is {l_d.item()}, stopping training")
                 sys.exit(1)
@@ -134,6 +133,7 @@ def train_one_epoch(
             images_epoch_dir = images_dir / f"epoch_{epoch}"
             images_epoch_dir.mkdir(exist_ok=True)
             with torch.no_grad():
+                x_t, sigma_t = forward_diffusion(x, t)
                 real_pred = mu_real(x_t, sigma_t, class_labels=class_ids)
                 fake_pred = mu_fake(x_t, sigma_t, class_labels=class_ids)
             grid = _save_intermediate_images(images_epoch_dir, [x, x_ref, real_pred, fake_pred, y_ref], "iter_0")
