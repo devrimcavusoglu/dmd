@@ -14,6 +14,7 @@ from typing import Optional, List
 
 import torch
 from neptune import Run
+from torch import tanh
 from torch.nn.modules.loss import _Loss as TorchLoss
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
@@ -67,6 +68,8 @@ def train_one_epoch(
     max_norm: float = 10,
     amp_autocast=None,
     neptune_run: Optional[Run] = None,
+    print_freq: int = 10,
+    im_save_freq: int = 300,
 ):
     amp_autocast = amp_autocast or suppress
     output_dir = Path(output_dir)
@@ -81,8 +84,6 @@ def train_one_epoch(
     metric_logger = MetricLogger(delimiter="  ", neptune_run=neptune_run)
     # metric_logger.add_meter("lr", SmoothedValue(window_size=1, fmt="{value:.6f}"))
     header = "Epoch: [{}]".format(epoch)
-    print_freq = 10
-    im_save_freq = 300
 
     i = 0
     for pairs in metric_logger.log_every(data_loader, print_freq, header):
@@ -105,8 +106,9 @@ def train_one_epoch(
             # copy weights without time dependence, but this approach seem to have gaps between
             # starting from the exact backbone vs. some blocks copied (e.g. no positional encoding).
             sigmas = torch.tensor([80.0] * z.shape[0], device=device)
-            x = generator(z, sigmas, class_labels=class_ids).clip(-1, 1)
-            x_ref = generator(z_ref, sigmas, class_labels=class_ids)
+            # tanh after small experiment between (no-postprocess, tanh, clipping)
+            x = tanh(generator(z, sigmas, class_labels=class_ids))
+            x_ref = tanh(generator(z_ref, sigmas, class_labels=class_ids))
             l_g = loss_g(mu_real, mu_fake, x, x_ref, y_ref, class_ids)
             if not math.isfinite(l_g.item()):
                 print(f"Generator Loss is {l_g.item()}, stopping training")
@@ -135,7 +137,7 @@ def train_one_epoch(
             with torch.no_grad():
                 real_pred = mu_real(x_t, sigma_t, class_labels=class_ids)
                 fake_pred = mu_fake(x_t, sigma_t, class_labels=class_ids)
-            grid = _save_intermediate_images(images_epoch_dir, [x, x_ref, real_pred, fake_pred, y_ref], f"iter_{i}")
+            grid = _save_intermediate_images(images_epoch_dir, [x, real_pred, fake_pred, x_ref, y_ref], f"iter_{i}")
             metric_logger.log_neptune(f"images", grid)
 
         # if model_ema is not None:
