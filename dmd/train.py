@@ -198,7 +198,7 @@ def run(
             "weight_decay": weight_decay,
             "betas": betas,
             "dmd_loss_timesteps": dmd_loss_timesteps,
-            "dmd_loss_lambda": dmd_loss_lambda,
+            "dmd_loss_lambda": float(dmd_loss_lambda),
             "device": str(device),
             "cudnn_benchmark": cudnn_benchmark,
             "amp_autocast": amp_autocast,

@@ -105,7 +105,7 @@ def train_one_epoch(
             # copy weights without time dependence, but this approach seem to have gaps between
             # starting from the exact backbone vs. some blocks copied (e.g. no positional encoding).
             sigmas = torch.tensor([80.0] * z.shape[0], device=device)
-            x = generator(z, sigmas, class_labels=class_ids)
+            x = generator(z, sigmas, class_labels=class_ids).clip(-1, 1)
             x_ref = generator(z_ref, sigmas, class_labels=class_ids)
             l_g = loss_g(mu_real, mu_fake, x, x_ref, y_ref, class_ids)
             if not math.isfinite(l_g.item()):
@@ -135,13 +135,15 @@ def train_one_epoch(
             with torch.no_grad():
                 real_pred = mu_real(x_t, sigma_t, class_labels=class_ids)
                 fake_pred = mu_fake(x_t, sigma_t, class_labels=class_ids)
-            grid = _save_intermediate_images(images_epoch_dir, [x, x_ref, real_pred, fake_pred, y_ref], "iter_0")
-            metric_logger.log_neptune(f"train/images/epoch_{0}", grid)
+            grid = _save_intermediate_images(images_epoch_dir, [x, x_ref, real_pred, fake_pred, y_ref], f"iter_{i}")
+            metric_logger.log_neptune(f"images", grid)
 
         # if model_ema is not None:
         #     model_ema.update(model)
 
-        metric_logger.update(loss_g=l_g.item(), loss_d=l_d.item())
+        metric_logger.update(loss_g=l_g.item(),
+                             loss_d=l_d.item()
+                             )
         # metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         i += 1
     # gather the stats from all processes

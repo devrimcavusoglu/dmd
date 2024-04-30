@@ -32,7 +32,7 @@ class DistributionMatchingLoss(_Loss):
 
         weighting_factor = torch.abs(x - pred_real_image).mean(
             dim=[1, 2, 3], keepdim=True
-        )  # / (sigma_t**2) Eqn. 8
+        )  # /  (sigma_t**2)  # Eqn. 8
         grad = (pred_fake_image - pred_real_image) / weighting_factor
         diff = (x - grad).detach()  # stop-gradient
         return 0.5 * F.mse_loss(x, diff, reduction=self.reduction)
