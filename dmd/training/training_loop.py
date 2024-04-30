@@ -14,7 +14,6 @@ from typing import Optional, List
 
 import torch
 from neptune import Run
-from torch import tanh
 from torch.nn.modules.loss import _Loss as TorchLoss
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
@@ -108,8 +107,8 @@ def train_one_epoch(
             # starting from the exact backbone vs. some blocks copied (e.g. no positional encoding).
             sigmas = torch.tensor([80.0] * z.shape[0], device=device)
             # tanh after small experiment between (no-postprocess, tanh, clipping)
-            x = tanh(generator(z, sigmas, class_labels=class_ids))
-            x_ref = tanh(generator(z_ref, sigmas, class_labels=class_ids))
+            x = generator(z, sigmas, class_labels=class_ids)
+            x_ref = generator(z_ref, sigmas, class_labels=class_ids)
             l_g = loss_g(mu_real, mu_fake, x, x_ref, y_ref, class_ids)
             if not math.isfinite(l_g.item()):
                 print(f"Generator Loss is {l_g.item()}, stopping training")
