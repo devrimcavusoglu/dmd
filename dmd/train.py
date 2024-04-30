@@ -18,6 +18,10 @@ from dmd.modeling_utils import load_model
 from dmd.training.training_loop import train_one_epoch
 from dmd.utils.common import create_experiment, set_seed
 from dmd.utils.training import is_main_process, save_on_master
+from dmd import PROJECT_ROOT
+
+from torchvision.datasets import CIFAR10
+import torchvision.transforms as transforms
 
 try:
     from apex import amp
@@ -128,8 +132,7 @@ def train(
 
 def run(
     model_path: str,
-    train_data_path: str,
-    test_data_path: str,
+    data_path: str,
     output_dir: str,
     epochs: int,
     batch_size: int = 56,
@@ -154,7 +157,8 @@ def run(
         data_path (str): Path of the h5 dataset file.
         output_dir (str): Path to the output directory to save the model.
         epochs (int): Number of epochs to train.
-        batch_size (int): Batch size used in training process. [default: 64]
+        batch_size (int): Batch size used in training process. [default: 56]
+        eval_batch_size (int): Batch size used in evaluation process. [default: 128]
         num_workers (int): Number of workers for data loader. [default: 10]
         lr (float): Learning rate. [default: 5e-5]
         weight_decay (float): Weight decay for optimizer. [default: 0.01]
@@ -168,12 +172,11 @@ def run(
         max_norm (Optional[float]): Maximum norm of the gradients. [default: 10.0]
     """
     # Prepare dataloader
-    train_data_path = Path(train_data_path).resolve()
-    test_data_path = Path(test_data_path).resolve()
-    training_dataset = CIFARPairs(train_data_path)
+    data_path = Path(data_path).resolve()
+    training_dataset = CIFARPairs(data_path)
     train_loader = DataLoader(training_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
-    test_dataset = CIFARPairs(test_data_path)
+    test_dataset = CIFAR10(root=(PROJECT_ROOT / "data").as_posix(), train=False, download=True, transform=transforms.ToTensor())
     test_loader = DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False, num_workers=num_workers)
 
     if device is None:
@@ -198,8 +201,7 @@ def run(
 
         neptune_run["training_args"] = {
             "model_path": model_path,
-            "train_data_path": train_data_path,
-            "test_data_path": test_data_path,
+            "data_path": data_path,
             "output_dir": output_dir,
             "epochs": epochs,
             "batch_size": batch_size,
