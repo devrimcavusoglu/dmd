@@ -16,7 +16,7 @@ from dmd import NEPTUNE_CONFIG_PATH, PROJECT_ROOT
 from dmd.dataset.cifar_pairs import CIFARPairs
 from dmd.fid import FID
 from dmd.loss import DenoisingLoss, GeneratorLoss
-from dmd.modeling_utils import load_model
+from dmd.modeling_utils import get_sigmas_karras, load_model
 from dmd.training.training_loop import train_one_epoch
 from dmd.utils.common import create_experiment, seed_everything
 from dmd.utils.logging import CheckpointHandler
@@ -46,9 +46,13 @@ try:
 except ImportError:
     has_fvcore = False
 
+SIGMA_MIN = 0.002
+SIGMA_MAX = 80.0
+
 
 def train(
     generator: torch.nn.Module,
+    generator_sigma,
     mu_fake: torch.nn.Module,
     mu_real: torch.nn.Module,
     data_loader_train: DataLoader,
@@ -70,11 +74,10 @@ def train(
 ):
     print(f"Start training for {epochs} epochs")
     start_time = time.time()
-    max_accuracy = 0.0
     if cudnn_benchmark:
         cudnn.benchmark = True
 
-    fid = FID(data_loader_test, device=device)
+    fid = FID(data_loader_test, generator_sigma=generator_sigma, device=device)
 
     for epoch in range(epochs):
         if is_distributed:
@@ -82,6 +85,7 @@ def train(
 
         train_stats = train_one_epoch(
             generator,
+            generator_sigma,
             mu_fake,
             mu_real,
             data_loader_train,
@@ -194,6 +198,11 @@ def run(
     mu_fake = load_model(network_path=model_path, device=device)
     generator = load_model(network_path=model_path, device=device)
 
+    # The paper fixed generator timestep as T-1
+    generator_sigma = get_sigmas_karras(
+        dmd_loss_timesteps, sigma_min=SIGMA_MIN, sigma_max=SIGMA_MAX, device=device
+    )[1]
+
     # Create losses
     generator_loss = GeneratorLoss(timesteps=dmd_loss_timesteps, lambda_reg=dmd_loss_lambda)
     diffusion_loss = DenoisingLoss()
@@ -228,11 +237,13 @@ def run(
             "print_steps": print_steps,
             "im_save_steps": im_save_steps,
             "model_save_steps": model_save_steps,
+            "generator_sigma": generator_sigma,
         }
 
     # start training
     train(
         generator=generator,
+        generator_sigma=generator_sigma,
         mu_real=mu_real,
         mu_fake=mu_fake,
         data_loader_train=train_loader,
