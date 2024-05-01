@@ -32,7 +32,7 @@ class DistributionMatchingLoss(_Loss):
 
         weighting_factor = torch.abs(x - pred_real_image).mean(
             dim=[1, 2, 3], keepdim=True
-        )  # / (sigma_t**2) Eqn. 8
+        )  # /  (sigma_t**2)  # Eqn. 8
         grad = (pred_fake_image - pred_real_image) / weighting_factor
         diff = (x - grad).detach()  # stop-gradient
         return 0.5 * F.mse_loss(x, diff, reduction=self.reduction)
@@ -67,8 +67,9 @@ class DenoisingLoss(_Loss):
     "One-step Diffusion with Distribution Matching Distillation".
     """
 
-    def forward(self, mu_fake: Module, x: torch.Tensor, sigma: torch.Tensor, class_ids: torch.Tensor = None) -> torch.Tensor:
+    def forward(self, mu_fake: Module, x: torch.Tensor, t: torch.Tensor, class_ids: torch.Tensor = None) -> torch.Tensor:
+        x_t, sigma_t = forward_diffusion(x.detach(), t)  # stop grad
         # Algorithm SNR + 1 / sigma_data^2 for EDM (sigma_data = 0.5)
-        pred_fake_image = mu_fake(x, sigma, class_labels=class_ids)
-        weight = 1 / sigma**2 + 1 / mu_fake.sigma_data**2
-        return torch.mean(weight[:, None, None, None] * (pred_fake_image - x) ** 2)
+        pred_fake_image = mu_fake(x_t, sigma_t, class_labels=class_ids)
+        weight = 1 / sigma_t**2 + 1 / mu_fake.sigma_data**2
+        return torch.mean(weight[:, None, None, None] * (pred_fake_image - x.detach()) ** 2)

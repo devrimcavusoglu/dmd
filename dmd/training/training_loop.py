@@ -55,7 +55,8 @@ def train_one_epoch(
     generator: torch.nn.Module,
     mu_fake: torch.nn.Module,
     mu_real: torch.nn.Module,
-    data_loader: DataLoader,
+    data_loader_train: DataLoader,
+    data_loader_test: DataLoader,
     loss_g: TorchLoss,
     loss_d: TorchLoss,
     optimizer_g: torch.optim.Optimizer,
@@ -67,6 +68,8 @@ def train_one_epoch(
     max_norm: float = 10,
     amp_autocast=None,
     neptune_run: Optional[Run] = None,
+    print_freq: int = 10,
+    im_save_freq: int = 300,
 ):
     amp_autocast = amp_autocast or suppress
     output_dir = Path(output_dir)
@@ -81,11 +84,9 @@ def train_one_epoch(
     metric_logger = MetricLogger(delimiter="  ", neptune_run=neptune_run)
     # metric_logger.add_meter("lr", SmoothedValue(window_size=1, fmt="{value:.6f}"))
     header = "Epoch: [{}]".format(epoch)
-    print_freq = 10
-    im_save_freq = 300
 
     i = 0
-    for pairs in metric_logger.log_every(data_loader, print_freq, header):
+    for pairs in metric_logger.log_every(data_loader_train, print_freq, header):
         y_ref = pairs["image"].to(device, non_blocking=True).to(torch.float32).clip(-1, 1)
         z_ref = pairs["latent"].to(device, non_blocking=True).to(torch.float32)
         z = torch.randn_like(y_ref, device=device)
@@ -105,6 +106,7 @@ def train_one_epoch(
             # copy weights without time dependence, but this approach seem to have gaps between
             # starting from the exact backbone vs. some blocks copied (e.g. no positional encoding).
             sigmas = torch.tensor([80.0] * z.shape[0], device=device)
+            # tanh after small experiment between (no-postprocess, tanh, clipping)
             x = generator(z, sigmas, class_labels=class_ids)
             x_ref = generator(z_ref, sigmas, class_labels=class_ids)
             l_g = loss_g(mu_real, mu_fake, x, x_ref, y_ref, class_ids)
@@ -119,8 +121,7 @@ def train_one_epoch(
         with amp_autocast():
             # Update mu_fake
             t = torch.randint(1, 1000, [x.shape[0]])  # t ~ DU(1,1000) as t=0 leads 1/0^2 -> inf
-            x_t, sigma_t = forward_diffusion(x.detach(), t)  # stop grad
-            l_d = loss_d(mu_fake, x.detach(), sigma_t, class_ids)
+            l_d = loss_d(mu_fake, x, t, class_ids)
             if not math.isfinite(l_d.item()):
                 print(f"Diffusion Loss is {l_d.item()}, stopping training")
                 sys.exit(1)
@@ -133,15 +134,18 @@ def train_one_epoch(
             images_epoch_dir = images_dir / f"epoch_{epoch}"
             images_epoch_dir.mkdir(exist_ok=True)
             with torch.no_grad():
+                x_t, sigma_t = forward_diffusion(x, t)
                 real_pred = mu_real(x_t, sigma_t, class_labels=class_ids)
                 fake_pred = mu_fake(x_t, sigma_t, class_labels=class_ids)
-            grid = _save_intermediate_images(images_epoch_dir, [x, x_ref, real_pred, fake_pred, y_ref], "iter_0")
-            metric_logger.log_neptune(f"train/images/epoch_{0}", grid)
+            grid = _save_intermediate_images(images_epoch_dir, [x, real_pred, fake_pred, x_ref, y_ref], f"iter_{i}")
+            metric_logger.log_neptune(f"images", grid)
 
         # if model_ema is not None:
         #     model_ema.update(model)
 
-        metric_logger.update(loss_g=l_g.item(), loss_d=l_d.item())
+        metric_logger.update(loss_g=l_g.item(),
+                             loss_d=l_d.item()
+                             )
         # metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         i += 1
     # gather the stats from all processes

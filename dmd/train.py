@@ -18,6 +18,10 @@ from dmd.modeling_utils import load_model
 from dmd.training.training_loop import train_one_epoch
 from dmd.utils.common import create_experiment, set_seed
 from dmd.utils.training import is_main_process, save_on_master
+from dmd import PROJECT_ROOT
+
+from torchvision.datasets import CIFAR10
+import torchvision.transforms as transforms
 
 try:
     from apex import amp
@@ -50,6 +54,7 @@ def train(
     mu_fake: torch.nn.Module,
     mu_real: torch.nn.Module,
     data_loader_train: DataLoader,
+    data_loader_test: DataLoader,
     loss_g: TorchLoss,
     loss_d: TorchLoss,
     optimizer_g: torch.optim.Optimizer,
@@ -62,6 +67,8 @@ def train(
     neptune_run: Optional[Run] = None,
     cudnn_benchmark: bool = True,
     is_distributed: bool = False,
+    print_freq: int = 10,
+    im_save_freq: int = 300
 ):
     output_dir = Path(output_dir)
     print(f"Start training for {epochs} epochs")
@@ -79,6 +86,7 @@ def train(
             mu_fake,
             mu_real,
             data_loader_train,
+            data_loader_test,
             loss_g,
             loss_d,
             optimizer_g,
@@ -88,7 +96,9 @@ def train(
             max_norm=max_norm,
             amp_autocast=amp_autocast,
             neptune_run=neptune_run,
-            output_dir=output_dir,
+            output_dir=output_dir.as_posix(),
+            print_freq=print_freq,
+            im_save_freq=im_save_freq
         )
 
         # lr_scheduler.step(epoch)
@@ -130,6 +140,7 @@ def run(
     output_dir: str,
     epochs: int,
     batch_size: int = 56,
+    eval_batch_size: int = 128,
     num_workers: int = 10,
     lr: float = 5e-5,
     weight_decay: float = 0.01,
@@ -141,6 +152,8 @@ def run(
     cudnn_benchmark: bool = True,
     amp_autocast: Optional = None,
     max_norm: float = 10.0,
+    print_freq: int = 10,
+    im_save_freq: int = 300,
 ) -> None:
     """
     Starts the training phase.
@@ -150,7 +163,8 @@ def run(
         data_path (str): Path of the h5 dataset file.
         output_dir (str): Path to the output directory to save the model.
         epochs (int): Number of epochs to train.
-        batch_size (int): Batch size used in training process. [default: 64]
+        batch_size (int): Batch size used in training process. [default: 56]
+        eval_batch_size (int): Batch size used in evaluation process. [default: 128]
         num_workers (int): Number of workers for data loader. [default: 10]
         lr (float): Learning rate. [default: 5e-5]
         weight_decay (float): Weight decay for optimizer. [default: 0.01]
@@ -162,11 +176,16 @@ def run(
         cudnn_benchmark (bool): Whether to use CUDNN benchmark. [default: True]
         amp_autocast (Optional): Whether to use AMP autocast. [default: None]
         max_norm (Optional[float]): Maximum norm of the gradients. [default: 10.0]
+        print_freq (int): Print frequency for metric report. [default: 10]
+        im_save_freq (int): Frequency to save image grids. [default: 300]
     """
     # Prepare dataloader
     data_path = Path(data_path).resolve()
     training_dataset = CIFARPairs(data_path)
     train_loader = DataLoader(training_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+
+    test_dataset = CIFAR10(root=(PROJECT_ROOT / "data").as_posix(), train=False, download=True, transform=transforms.ToTensor())
+    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False, num_workers=num_workers)
 
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -198,11 +217,13 @@ def run(
             "weight_decay": weight_decay,
             "betas": betas,
             "dmd_loss_timesteps": dmd_loss_timesteps,
-            "dmd_loss_lambda": dmd_loss_lambda,
+            "dmd_loss_lambda": float(dmd_loss_lambda),
             "device": str(device),
             "cudnn_benchmark": cudnn_benchmark,
             "amp_autocast": amp_autocast,
             "max_norm": max_norm,
+            "print_freq": print_freq,
+            "im_save_freq": im_save_freq
         }
 
     # start training
@@ -211,6 +232,7 @@ def run(
         mu_real=mu_real,
         mu_fake=mu_fake,
         data_loader_train=train_loader,
+        data_loader_test=test_loader,
         device=device,
         loss_g=generator_loss,
         loss_d=diffusion_loss,
@@ -222,6 +244,8 @@ def run(
         cudnn_benchmark=cudnn_benchmark,
         amp_autocast=amp_autocast,
         max_norm=max_norm,
+        print_freq=print_freq,
+        im_save_freq=im_save_freq
     )
 
     if neptune_run:
