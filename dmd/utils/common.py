@@ -1,3 +1,4 @@
+import os
 import random
 from configparser import ConfigParser
 from typing import Optional
@@ -10,9 +11,11 @@ import PIL.Image
 from dmd.utils.training import get_rank
 
 
-def set_seed(seed):
+def seed_everything(seed):
     seed = seed + get_rank()
+    os.environ['PYTHONHASHSEED'] = str(seed)
     torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 

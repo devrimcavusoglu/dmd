@@ -21,14 +21,16 @@ https://github.com/facebookresearch/deit/blob/main/utils.py
 """
 
 import datetime
+import json
 import time
 from collections import defaultdict, deque
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Dict, Any
 
 import torch
 import torch.distributed as dist
 
-from dmd.utils.training import is_dist_avail_and_initialized
+from dmd.utils.training import is_dist_avail_and_initialized, save_on_master, is_main_process
 
 
 class SmoothedValue(object):
@@ -191,3 +193,33 @@ class MetricLogger(object):
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         print("{} Total time: {} ({:.4f} s / it)".format(header, total_time_str, total_time / len(iterable)))
+
+
+class CheckpointHandler:
+    """
+    Checkpoint manager for saving and loading from a checkpoint of trained models.
+    """
+    def __init__(self, checkpoint_dir: str, lower_is_better: bool = True):
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.lower_is_better = lower_is_better
+        self._metric_value = float("inf") if lower_is_better else -float("inf")
+
+    def save(self, model_dict: Dict[str, Any], stats: Dict[str, Any], metric: float, epoch: int) -> None:
+        if self.lower_is_better:
+            is_best = metric < self._metric_value
+        else:
+            is_best = metric > self._metric_value
+
+        # save the last checkpoint
+        save_on_master(model_dict, self.checkpoint_dir / f"last_checkpoint_epoch.pt")
+
+        if is_best:
+            stats["best_epoch"] = epoch
+            save_on_master(
+                model_dict,
+                self.checkpoint_dir / f"best_checkpoint_epoch.pt"
+            )
+
+        if is_main_process():
+            with (self.checkpoint_dir / "log.txt").open("a") as f:
+                f.write(json.dumps(stats) + "\n")
