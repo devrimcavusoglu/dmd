@@ -1,3 +1,10 @@
+"""
+Main training entry point for DMD training.
+Part of this file is taken and adopted from devrimcavusoglu/std. See
+the original file below
+https://github.com/devrimcavusoglu/std/blob/main/std/main.py
+"""
+
 import datetime
 import time
 from pathlib import Path
@@ -16,7 +23,7 @@ from dmd import NEPTUNE_CONFIG_PATH, PROJECT_ROOT
 from dmd.dataset.cifar_pairs import CIFARPairs
 from dmd.fid import FID
 from dmd.loss import DenoisingLoss, GeneratorLoss
-from dmd.modeling_utils import get_sigmas_karras, load_model
+from dmd.modeling_utils import SIGMA_MIN, get_sigmas_karras, load_edm
 from dmd.training.training_loop import train_one_epoch
 from dmd.utils.common import create_experiment, seed_everything
 from dmd.utils.logging import CheckpointHandler
@@ -45,9 +52,6 @@ try:
     has_fvcore = True
 except ImportError:
     has_fvcore = False
-
-SIGMA_MIN = 0.002
-SIGMA_MAX = 80.0
 
 
 def train(
@@ -194,14 +198,9 @@ def run(
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device)
-    mu_real = load_model(network_path=model_path, device=device)
-    mu_fake = load_model(network_path=model_path, device=device)
-    generator = load_model(network_path=model_path, device=device)
-
-    # The paper fixed generator timestep as T-1
-    generator_sigma = get_sigmas_karras(
-        dmd_loss_timesteps, sigma_min=SIGMA_MIN, sigma_max=SIGMA_MAX, device=device
-    )[1]
+    mu_real = load_edm(model_path=model_path, device=device)
+    mu_fake = load_edm(model_path=model_path, device=device)
+    generator = load_edm(model_path=model_path, device=device)
 
     # Create losses
     generator_loss = GeneratorLoss(timesteps=dmd_loss_timesteps, lambda_reg=dmd_loss_lambda)

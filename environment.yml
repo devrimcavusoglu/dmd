@@ -27,4 +27,5 @@ dependencies:
     - imageio-ffmpeg>=0.4.3
     - isort==5.9.2
     - neptune
+    - notebook
     - pyspng

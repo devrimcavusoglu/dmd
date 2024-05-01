@@ -1,11 +1,9 @@
-# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-#
-# This work is licensed under a Creative Commons
-# Attribution-NonCommercial-ShareAlike 4.0 International License.
-# You should have received a copy of the license along with this
-# work. If not, see http://creativecommons.org/licenses/by-nc-sa/4.0/
-
-"""Main training loop."""
+"""
+Main training loop.
+Part of this file taken and adopted from devrimcavusoglu/std repository. See
+the original file below
+https://github.com/devrimcavusoglu/std/blob/main/std/engine.py
+"""
 import math
 import sys
 from contextlib import suppress

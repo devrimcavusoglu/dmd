@@ -1,12 +1,13 @@
 import pickle
 import sys
-from typing import Tuple
+from typing import List, Tuple, Union
 
 import torch
 from torch.nn import Module
 
 from dmd import SOURCES_ROOT, dnnlib
 from dmd.torch_utils import distributed as dist
+from dmd.utils.common import image_grid
 
 
 class StackedRandomGenerator:
@@ -33,7 +34,7 @@ class StackedRandomGenerator:
         )
 
 
-def load_model(network_path: str, device: torch.device) -> Module:
+def load_edm(model_path: str, device: torch.device) -> Module:
     """
     Loads a pretrained model from given path. This function loads the model from the original
     pickle file of EDM models.
@@ -44,22 +45,34 @@ def load_model(network_path: str, device: torch.device) -> Module:
         see the related comment.
 
     Args:
-        network_path (str): Path to the model weights.
+        model_path (str): Path to the model weights.
         device (torch.device): Device to load the model to.
     """
     # Refactoring the package structure and import scheme (e.g. this module) breaks the loading of the
     # pickle file (as it also possesses the complete module structure at the save time). The following
     # line is a little trick to make the import structure the same to load the pickle without a failure.
     sys.path.insert(0, SOURCES_ROOT.as_posix())
-    with dnnlib.util.open_url(network_path, verbose=(dist.get_rank() == 0)) as f:
+    with dnnlib.util.open_url(model_path, verbose=(dist.get_rank() == 0)) as f:
         return pickle.load(f)["ema"].to(device)
 
 
-def copy_weights(original: Module, clone: Module) -> None:
+def load_dmd_model(model_path: str, device: torch.device) -> Module:
     """
-    Copies weights from `original` to `clone`.
+    Loads a pretrained model from given path. This function loads the model from the original
+    pickle file of EDM models.
+
+    Note:
+        The saved binary files (pickle) contain serialized Python object where some of them
+        require certain imports. This module is not identical to the structure of 'NVLabs/edm',
+        see the related comment.
+
+    Args:
+        model_path (str): Path to the model weights.
+        device (torch.device): Device to load the model to.
     """
-    clone.load_state_dict(original.state_dict())
+    m = torch.load(model_path, map_location="cpu")
+    EDMPrecond()
+    return m["model_g"].to(device)
 
 
 def encode_labels(class_ids: torch.Tensor, label_dim: int) -> torch.Tensor:
@@ -102,3 +115,54 @@ def forward_diffusion(
     ns = noise * sigma[-(t + 1), None, None, None]  # broadcast for scalar product
     noisy_x = x + ns
     return noisy_x, sigma[-(t + 1)]
+
+
+def get_fixed_generator_sigma(size: int, device: Union[str, torch.device]) -> torch.Tensor:
+    """
+    Returns sigmas of size `size` with fixed sigmas for the generator. In the paper, it
+    is fixed to T-1'th timestep for generator. In practice EDM models are fed sigma value at timestep t.
+    """
+    sigma = get_sigmas_karras(n=1000, sigma_min=0.002, sigma_max=80.0, device=device)[1]  # sigma_(T-1)
+    return torch.tile(sigma, (1, size))
+
+
+def sample_from_generator(
+    generator,
+    seeds: List[int] = None,
+    latents: torch.Tensor = None,
+    class_ids: torch.Tensor = None,
+    device: Union[str, torch.device] = None,
+    im_channels: int = 3,
+    im_resolution: int = 32,
+    scale_latents: bool = True,
+) -> torch.Tensor:
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = torch.device(device)
+
+    if not latents or not seeds:
+        raise ValueError("Either `latent` or `seeds` must be provided.")
+
+    if latents is None:
+        scale_latents = True  # override
+        rnd = StackedRandomGenerator(device, seeds)
+        latents = rnd.randn(
+            [len(seeds), im_channels, im_resolution, im_resolution],
+            device=device,
+        )
+
+    if scale_latents:
+        g_sigmas = get_fixed_generator_sigma(len(seeds), device=device)
+        latents = latents * g_sigmas
+
+    return generator.sample(latents, class_ids=class_ids).to(device)
+
+
+if __name__ == "__main__":
+    device = torch.device("cuda")
+    model = load_dmd_model("/home/devrim/lab/gh/ms/dmd/outputs/toy_test/best_checkpoint.pt", device)
+    seeds = list(range(10))
+    class_ids = torch.tensor([0] * len(seeds), device=device)
+    encode_labels(class_ids=class_ids, label_dim=10)
+    r = sample_from_generator(model, seeds=seeds, class_ids=class_ids, device=device)
+    image_grid(r, 2, 5)
