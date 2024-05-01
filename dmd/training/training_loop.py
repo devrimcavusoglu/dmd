@@ -56,7 +56,6 @@ def train_one_epoch(
     mu_fake: torch.nn.Module,
     mu_real: torch.nn.Module,
     data_loader_train: DataLoader,
-    data_loader_test: DataLoader,
     loss_g: TorchLoss,
     loss_d: TorchLoss,
     optimizer_g: torch.optim.Optimizer,

@@ -116,8 +116,11 @@ def train(
             # **{f"test_{k}": v for k, v in test_stats.items()},
             "epoch": epoch,
         }
-        log_stats["test_fid"] = fid(generator)
-        checkpoint_handler.save(model_dict, log_stats, log_stats["test_fid"], epoch)
+        test_fid = fid(generator)
+        neptune_run["test/fid"].append(test_fid)
+        print(f"Test FID: {test_fid}")
+        log_stats["test_fid"] = test_fid
+        checkpoint_handler.save(model_dict, log_stats, test_fid, epoch)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
