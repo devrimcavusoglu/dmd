@@ -23,7 +23,7 @@ from dmd import NEPTUNE_CONFIG_PATH, PROJECT_ROOT
 from dmd.dataset.cifar_pairs import CIFARPairs
 from dmd.fid import FID
 from dmd.loss import DenoisingLoss, GeneratorLoss
-from dmd.modeling_utils import SIGMA_MIN, get_sigmas_karras, load_edm
+from dmd.modeling_utils import load_edm
 from dmd.training.training_loop import train_one_epoch
 from dmd.utils.common import create_experiment, seed_everything
 from dmd.utils.logging import CheckpointHandler
@@ -56,7 +56,6 @@ except ImportError:
 
 def train(
     generator: torch.nn.Module,
-    generator_sigma,
     mu_fake: torch.nn.Module,
     mu_real: torch.nn.Module,
     data_loader_train: DataLoader,
@@ -81,7 +80,7 @@ def train(
     if cudnn_benchmark:
         cudnn.benchmark = True
 
-    fid = FID(data_loader_test, generator_sigma=generator_sigma, device=device)
+    fid = FID(data_loader_test, device=device)
 
     for epoch in range(epochs):
         if is_distributed:
@@ -89,7 +88,6 @@ def train(
 
         train_stats = train_one_epoch(
             generator,
-            generator_sigma,
             mu_fake,
             mu_real,
             data_loader_train,
@@ -236,13 +234,11 @@ def run(
             "print_steps": print_steps,
             "im_save_steps": im_save_steps,
             "model_save_steps": model_save_steps,
-            "generator_sigma": generator_sigma,
         }
 
     # start training
     train(
         generator=generator,
-        generator_sigma=generator_sigma,
         mu_real=mu_real,
         mu_fake=mu_fake,
         data_loader_train=train_loader,

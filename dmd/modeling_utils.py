@@ -7,6 +7,7 @@ from torch.nn import Module
 
 from dmd import SOURCES_ROOT, dnnlib
 from dmd.torch_utils import distributed as dist
+from dmd.training.networks import EDMPrecond
 from dmd.utils.common import image_grid
 
 
@@ -71,7 +72,6 @@ def load_dmd_model(model_path: str, device: torch.device) -> Module:
         device (torch.device): Device to load the model to.
     """
     m = torch.load(model_path, map_location="cpu")
-    EDMPrecond()
     return m["model_g"].to(device)
 
 
@@ -127,7 +127,7 @@ def get_fixed_generator_sigma(size: int, device: Union[str, torch.device]) -> to
 
 
 def sample_from_generator(
-    generator,
+    generator: EDMPrecond,
     seeds: List[int] = None,
     latents: torch.Tensor = None,
     class_ids: torch.Tensor = None,
@@ -151,11 +151,11 @@ def sample_from_generator(
             device=device,
         )
 
+    g_sigmas = get_fixed_generator_sigma(len(seeds), device=device)
     if scale_latents:
-        g_sigmas = get_fixed_generator_sigma(len(seeds), device=device)
-        latents = latents * g_sigmas
+        latents = latents * g_sigmas[0, 0]
 
-    return generator.sample(latents, class_ids=class_ids).to(device)
+    return generator(latents, g_sigmas, class_labels=class_ids)
 
 
 if __name__ == "__main__":

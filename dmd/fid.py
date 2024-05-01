@@ -6,14 +6,13 @@ from scipy.linalg import sqrtm
 from torchvision.models.inception import inception_v3
 from tqdm import tqdm
 
-from dmd.modeling_utils import encode_labels
+from dmd.modeling_utils import encode_labels, get_fixed_generator_sigma
 
 
 class FID:
-    def __init__(self, data_loader, generator_sigma, device="cuda") -> None:
+    def __init__(self, data_loader, device="cuda") -> None:
         self.dataloader = data_loader
         self.device = device
-        self.generator_sigma = generator_sigma
         self.inception_model = inception_v3(pretrained=True, transform_input=True).to(self.device)
         self.inception_model.fc = nn.Identity()
         self.inception_model.eval()
@@ -32,11 +31,11 @@ class FID:
         ):
             z = torch.randn_like(image, device=self.device)
             # Scale Z ~ N(0,1) (z and z_ref) w/ 80.0 to match the sigma_t at T_n
-            z = z * self.generator_sigma
+            g_sigma = get_fixed_generator_sigma(z.shape[0], device=self.device)
+            z = z * g_sigma[0, 0]  # scalar product
             class_idx = class_idx.to(self.device, non_blocking=True)
             class_ids = encode_labels(class_idx, generator.label_dim)
-            sigmas = torch.tile(self.generator_sigma, (1, z.shape[0]))
-            fake_image_batch = generator(z, sigmas, class_labels=class_ids)
+            fake_image_batch = generator(z, g_sigma, class_labels=class_ids)
             fake_image_batch = (fake_image_batch + 1) / 2.0  # Normalizing the pixel values from [-1,1] to [0,1]
             inception_feature_batch = self.get_inception_features(fake_image_batch)
             inception_feature_batches_fake.append(inception_feature_batch)
