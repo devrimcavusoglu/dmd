@@ -4,23 +4,21 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import torch
+import torchvision.transforms as transforms
 from neptune import Run
 from torch.backends import cudnn
 from torch.nn.modules.loss import _Loss as TorchLoss
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
+from torchvision.datasets import CIFAR10
 
-from dmd import NEPTUNE_CONFIG_PATH
+from dmd import NEPTUNE_CONFIG_PATH, PROJECT_ROOT
 from dmd.dataset.cifar_pairs import CIFARPairs
 from dmd.loss import DenoisingLoss, GeneratorLoss
 from dmd.modeling_utils import load_model
 from dmd.training.training_loop import train_one_epoch
 from dmd.utils.common import create_experiment, seed_everything
 from dmd.utils.logging import CheckpointHandler
-from dmd import PROJECT_ROOT
-
-from torchvision.datasets import CIFAR10
-import torchvision.transforms as transforms
 
 try:
     from apex import amp
@@ -96,20 +94,20 @@ def train(
             neptune_run=neptune_run,
             output_dir=checkpoint_handler.checkpoint_dir,
             print_freq=print_freq,
-            im_save_freq=im_save_freq
+            im_save_freq=im_save_freq,
         )
 
         # lr_scheduler.step(epoch)
         model_dict = {
-                    "model_g": generator.state_dict(),
-                    "optimizer_g": optimizer_g.state_dict(),
-                    "model_d": mu_fake.state_dict(),
-                    "optimizer_d": optimizer_d.state_dict(),
-                    # "lr_scheduler": lr_scheduler.state_dict(),
-                    "epoch": epoch,
-                    # "model_ema": get_state_dict(model_ema),
-                    # "args": args,
-                }
+            "model_g": generator.state_dict(),
+            "optimizer_g": optimizer_g.state_dict(),
+            "model_d": mu_fake.state_dict(),
+            "optimizer_d": optimizer_d.state_dict(),
+            # "lr_scheduler": lr_scheduler.state_dict(),
+            "epoch": epoch,
+            # "model_ema": get_state_dict(model_ema),
+            # "args": args,
+        }
         log_stats = {
             **{f"train_{k}": v for k, v in train_stats.items()},
             # **{f"test_{k}": v for k, v in test_stats.items()},
@@ -177,7 +175,9 @@ def run(
     training_dataset = CIFARPairs(data_path)
     train_loader = DataLoader(training_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
-    test_dataset = CIFAR10(root=(PROJECT_ROOT / "data").as_posix(), train=False, download=True, transform=transforms.ToTensor())
+    test_dataset = CIFAR10(
+        root=(PROJECT_ROOT / "data").as_posix(), train=False, download=True, transform=transforms.ToTensor()
+    )
     test_loader = DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False, num_workers=num_workers)
 
     if device is None:
@@ -195,8 +195,9 @@ def run(
     generator_optimizer = AdamW(params=generator.parameters(), lr=lr, weight_decay=weight_decay, betas=betas)
     diffuser_optimizer = AdamW(params=mu_fake.parameters(), lr=lr, weight_decay=weight_decay, betas=betas)
 
-    checkpoint_handler = CheckpointHandler(checkpoint_dir=output_dir, lower_is_better=True)  # hardcoded lower_is_better for experimentation
-
+    checkpoint_handler = CheckpointHandler(
+        checkpoint_dir=output_dir, lower_is_better=True
+    )  # hardcoded lower_is_better for experimentation
 
     neptune_run = None
     if log_neptune:
@@ -219,7 +220,7 @@ def run(
             "max_norm": max_norm,
             "print_steps": print_steps,
             "im_save_steps": im_save_steps,
-            "model_save_steps": model_save_steps
+            "model_save_steps": model_save_steps,
         }
 
     # start training

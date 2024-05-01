@@ -25,12 +25,12 @@ import json
 import time
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 import torch
 import torch.distributed as dist
 
-from dmd.utils.training import is_dist_avail_and_initialized, save_on_master, is_main_process
+from dmd.utils.training import is_dist_avail_and_initialized, is_main_process, save_on_master
 
 
 class SmoothedValue(object):
@@ -199,6 +199,7 @@ class CheckpointHandler:
     """
     Checkpoint manager for saving and loading from a checkpoint of trained models.
     """
+
     def __init__(self, checkpoint_dir: str, lower_is_better: bool = True):
         self.checkpoint_dir = Path(checkpoint_dir)
         self.lower_is_better = lower_is_better
@@ -215,10 +216,7 @@ class CheckpointHandler:
 
         if is_best:
             stats["best_epoch"] = epoch
-            save_on_master(
-                model_dict,
-                self.checkpoint_dir / f"best_checkpoint_epoch.pt"
-            )
+            save_on_master(model_dict, self.checkpoint_dir / f"best_checkpoint_epoch.pt")
 
         if is_main_process():
             with (self.checkpoint_dir / "log.txt").open("a") as f:
