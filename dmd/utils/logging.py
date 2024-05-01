@@ -21,14 +21,16 @@ https://github.com/facebookresearch/deit/blob/main/utils.py
 """
 
 import datetime
+import json
 import time
 from collections import defaultdict, deque
-from typing import Optional
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 import torch
 import torch.distributed as dist
 
-from dmd.utils.training import is_dist_avail_and_initialized
+from dmd.utils.training import is_dist_avail_and_initialized, is_main_process, save_on_master
 
 
 class SmoothedValue(object):
@@ -191,3 +193,36 @@ class MetricLogger(object):
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         print("{} Total time: {} ({:.4f} s / it)".format(header, total_time_str, total_time / len(iterable)))
+
+
+class CheckpointHandler:
+    """
+    Checkpoint manager for saving and loading from a checkpoint of trained models.
+    """
+
+    def __init__(self, checkpoint_dir: str, lower_is_better: bool = True):
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.lower_is_better = lower_is_better
+        self._metric_value = float("inf") if lower_is_better else -float("inf")
+        self._best_epoch = None
+
+    def is_better(self, metric):
+        if self.lower_is_better:
+            return metric < self._metric_value
+        return metric > self._metric_value
+
+    def save(self, model_dict: Dict[str, Any], stats: Dict[str, Any], metric: float, epoch: int) -> None:
+        is_best = self.is_better(metric)
+        # save the last checkpoint
+        save_on_master(model_dict, self.checkpoint_dir / f"last_checkpoint.pt")
+
+        if is_best:
+            self._metric_value = metric
+            self._best_epoch = epoch
+            save_on_master(model_dict, self.checkpoint_dir / f"best_checkpoint.pt")
+
+        stats["best_epoch"] = self._best_epoch if epoch > 0 else None
+        stats["best_metric"] = self._metric_value
+        if is_main_process():
+            with (self.checkpoint_dir / "log.txt").open("a") as f:
+                f.write(json.dumps(stats) + "\n")

@@ -18,7 +18,9 @@ class DistributionMatchingLoss(_Loss):
         super().__init__(*args, **kwargs)
         self.timesteps = timesteps
 
-    def forward(self, mu_real: Module, mu_fake: Module, x: torch.Tensor, class_ids: torch.Tensor = None) -> torch.Tensor:
+    def forward(
+        self, mu_real: Module, mu_fake: Module, x: torch.Tensor, class_ids: torch.Tensor = None
+    ) -> torch.Tensor:
         b, c, w, h = x.shape
 
         # In practice T_min, T_max choices follows DreamFusion as follows
@@ -46,8 +48,13 @@ class GeneratorLoss(_Loss):
         self.lambda_reg = lambda_reg
 
     def forward(
-        self, mu_real: Module, mu_fake: Module, x: torch.Tensor, x_ref: torch.Tensor, y_ref: torch.Tensor,
-            class_ids: torch.Tensor = None
+        self,
+        mu_real: Module,
+        mu_fake: Module,
+        x: torch.Tensor,
+        x_ref: torch.Tensor,
+        y_ref: torch.Tensor,
+        class_ids: torch.Tensor = None,
     ) -> torch.Tensor:
         loss_kl = self.dmd_loss(mu_real, mu_fake, x, class_ids)
 
@@ -67,7 +74,9 @@ class DenoisingLoss(_Loss):
     "One-step Diffusion with Distribution Matching Distillation".
     """
 
-    def forward(self, mu_fake: Module, x: torch.Tensor, t: torch.Tensor, class_ids: torch.Tensor = None) -> torch.Tensor:
+    def forward(
+        self, mu_fake: Module, x: torch.Tensor, t: torch.Tensor, class_ids: torch.Tensor = None
+    ) -> torch.Tensor:
         x_t, sigma_t = forward_diffusion(x.detach(), t)  # stop grad
         # Algorithm SNR + 1 / sigma_data^2 for EDM (sigma_data = 0.5)
         pred_fake_image = mu_fake(x_t, sigma_t, class_labels=class_ids)

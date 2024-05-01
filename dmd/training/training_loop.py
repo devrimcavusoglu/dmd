@@ -10,7 +10,7 @@ import math
 import sys
 from contextlib import suppress
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 import torch
 from neptune import Run
@@ -137,15 +137,15 @@ def train_one_epoch(
                 x_t, sigma_t = forward_diffusion(x, t)
                 real_pred = mu_real(x_t, sigma_t, class_labels=class_ids)
                 fake_pred = mu_fake(x_t, sigma_t, class_labels=class_ids)
-            grid = _save_intermediate_images(images_epoch_dir, [x, real_pred, fake_pred, x_ref, y_ref], f"iter_{i}")
+            grid = _save_intermediate_images(
+                images_epoch_dir, [x, real_pred, fake_pred, x_ref, y_ref], f"iter_{i}"
+            )
             metric_logger.log_neptune(f"images", grid)
 
         # if model_ema is not None:
         #     model_ema.update(model)
 
-        metric_logger.update(loss_g=l_g.item(),
-                             loss_d=l_d.item()
-                             )
+        metric_logger.update(loss_g=l_g.item(), loss_d=l_d.item())
         # metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         i += 1
     # gather the stats from all processes
