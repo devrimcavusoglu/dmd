@@ -204,20 +204,25 @@ class CheckpointHandler:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.lower_is_better = lower_is_better
         self._metric_value = float("inf") if lower_is_better else -float("inf")
+        self._best_epoch = None
+
+    def is_better(self, metric):
+        if self.lower_is_better:
+            return metric < self._metric_value
+        return metric > self._metric_value
 
     def save(self, model_dict: Dict[str, Any], stats: Dict[str, Any], metric: float, epoch: int) -> None:
-        if self.lower_is_better:
-            is_best = metric < self._metric_value
-        else:
-            is_best = metric > self._metric_value
-
+        is_best = self.is_better(metric)
         # save the last checkpoint
-        save_on_master(model_dict, self.checkpoint_dir / f"last_checkpoint_epoch.pt")
+        save_on_master(model_dict, self.checkpoint_dir / f"last_checkpoint.pt")
 
         if is_best:
-            stats["best_epoch"] = epoch
-            save_on_master(model_dict, self.checkpoint_dir / f"best_checkpoint_epoch.pt")
+            self._metric_value = metric
+            self._best_epoch = epoch
+            save_on_master(model_dict, self.checkpoint_dir / f"best_checkpoint.pt")
 
+        stats["best_epoch"] = self._best_epoch if epoch > 0 else None
+        stats["best_metric"] = self._metric_value
         if is_main_process():
             with (self.checkpoint_dir / "log.txt").open("a") as f:
                 f.write(json.dumps(stats) + "\n")

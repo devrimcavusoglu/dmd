@@ -14,6 +14,7 @@ from torchvision.datasets import CIFAR10
 
 from dmd import NEPTUNE_CONFIG_PATH, PROJECT_ROOT
 from dmd.dataset.cifar_pairs import CIFARPairs
+from dmd.fid import FID
 from dmd.loss import DenoisingLoss, GeneratorLoss
 from dmd.modeling_utils import load_model
 from dmd.training.training_loop import train_one_epoch
@@ -73,6 +74,8 @@ def train(
     if cudnn_benchmark:
         cudnn.benchmark = True
 
+    fid = FID(data_loader_test, device=device)
+
     for epoch in range(epochs):
         if is_distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -113,7 +116,8 @@ def train(
             # **{f"test_{k}": v for k, v in test_stats.items()},
             "epoch": epoch,
         }
-        checkpoint_handler.save(model_dict, log_stats, log_stats["train_loss_g"], epoch)
+        log_stats["test_fid"] = fid(generator)
+        checkpoint_handler.save(model_dict, log_stats, log_stats["test_fid"], epoch)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
