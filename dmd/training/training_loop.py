@@ -53,6 +53,7 @@ def update_parameters(model, loss, optimizer, max_norm):
 
 def train_one_epoch(
     generator: torch.nn.Module,
+    generator_sigma,
     mu_fake: torch.nn.Module,
     mu_real: torch.nn.Module,
     data_loader_train: DataLoader,
@@ -89,9 +90,9 @@ def train_one_epoch(
         y_ref = pairs["image"].to(device, non_blocking=True).to(torch.float32).clip(-1, 1)
         z_ref = pairs["latent"].to(device, non_blocking=True).to(torch.float32)
         z = torch.randn_like(y_ref, device=device)
-        # Scale Z ~ N(0,1) (z and z_ref) w/ 80.0 to match the sigma_t at T_n
-        z = z * 80.0
-        z_ref = z_ref * 80.0
+        # Scale Z ~ N(0,1) (z and z_ref) w/ sigma(T-1) to match the sigma at T-1
+        z = z * generator_sigma
+        z_ref = z_ref * generator_sigma
         class_idx = pairs["class_id"].to(device, non_blocking=True)
         class_ids = encode_labels(class_idx, generator.label_dim)
 
@@ -104,7 +105,7 @@ def train_one_epoch(
             # another alternative could've been to employ a equal size of UNet (SongUNet) and
             # copy weights without time dependence, but this approach seem to have gaps between
             # starting from the exact backbone vs. some blocks copied (e.g. no positional encoding).
-            sigmas = torch.tensor([80.0] * z.shape[0], device=device)
+            sigmas = torch.tile(generator_sigma, (1, z.shape[0]))
             # tanh after small experiment between (no-postprocess, tanh, clipping)
             x = generator(z, sigmas, class_labels=class_ids)
             x_ref = generator(z_ref, sigmas, class_labels=class_ids)
