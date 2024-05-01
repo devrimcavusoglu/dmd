@@ -85,7 +85,6 @@ def train(
             mu_fake,
             mu_real,
             data_loader_train,
-            data_loader_test,
             loss_g,
             loss_d,
             optimizer_g,
@@ -117,7 +116,8 @@ def train(
             "epoch": epoch,
         }
         test_fid = fid(generator)
-        neptune_run["test/fid"].append(test_fid)
+        if neptune_run is not None:
+            neptune_run["test/fid"].append(test_fid)
         print(f"Test FID: {test_fid}")
         log_stats["test_fid"] = test_fid
         checkpoint_handler.save(model_dict, log_stats, test_fid, epoch)
