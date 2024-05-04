@@ -4,6 +4,7 @@ from typing import List, Tuple, Union
 
 import torch
 from torch.nn import Module
+from torch.nn.functional import one_hot
 
 from dmd import SOURCES_ROOT, dnnlib
 from dmd.torch_utils import distributed as dist
@@ -76,11 +77,9 @@ def load_dmd_model(model_path: str, device: torch.device) -> Module:
 
 
 def encode_labels(class_ids: torch.Tensor, label_dim: int) -> torch.Tensor:
-    batch_size = class_ids.shape[-1]
     class_labels = None
     if label_dim:
-        class_labels = torch.zeros((batch_size, label_dim), device=class_ids.device)
-        class_labels[:, class_ids] = 1
+        one_hot(class_ids, num_classes=label_dim)
     return class_labels
 
 
