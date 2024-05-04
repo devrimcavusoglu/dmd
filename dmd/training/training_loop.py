@@ -78,7 +78,6 @@ def train_one_epoch(
     mu_fake.requires_grad_(True).train()
     mu_real.requires_grad_(False).eval()
 
-
     metric_logger = MetricLogger(delimiter="  ", neptune_run=neptune_run)
     # metric_logger.add_meter("lr", SmoothedValue(window_size=1, fmt="{value:.6f}"))
     header = "Epoch: [{}]".format(epoch)

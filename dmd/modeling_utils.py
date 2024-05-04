@@ -1,6 +1,6 @@
 import pickle
 import sys
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch.nn import Module
@@ -76,7 +76,7 @@ def load_dmd_model(model_path: str, device: torch.device) -> Module:
     return m["model_g"].to(device)
 
 
-def encode_labels(class_ids: torch.Tensor, label_dim: int) -> torch.Tensor:
+def encode_labels(class_ids: torch.Tensor, label_dim: int) -> Optional[torch.Tensor]:
     class_labels = None
     if label_dim:
         one_hot(class_ids, num_classes=label_dim)

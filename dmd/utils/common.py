@@ -44,7 +44,7 @@ def image_grid(imgs, rows, cols, margin=2):
     assert len(imgs) == rows * cols
 
     w, h = imgs[0].size
-    grid = PIL.Image.new("RGB", size=(cols * w + (cols + 1) * margin, rows * h + (rows + 1) * margin))
+    grid = PIL.Image.new("RGB", (cols * w + (cols + 1) * margin, rows * h + (rows + 1) * margin), "WHITE")
     for i, img in enumerate(imgs):
-        grid.paste(img, box=(i % cols * (w + margin), i // cols * (h + margin)))
+        grid.paste(img, box=(i % cols * (w + margin) + margin, i // cols * (h + margin) + margin))
     return grid

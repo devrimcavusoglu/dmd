@@ -3,7 +3,7 @@
 mkdir -p data
 
 # Download Distillation dataset in HDF5 format
-wget https://huggingface.co/datasets/Devrim/dmd_cifar10_edm_distillation_dataset/resolve/main/cifar.hdf5?download=true -O data/cifar_toy.hdf5
+wget https://huggingface.co/datasets/Devrim/dmd_cifar10_edm_distillation_dataset/resolve/main/cifar.hdf5?download=true -O data/cifar.hdf5
 wget https://huggingface.co/datasets/Devrim/dmd_cifar10_edm_distillation_dataset/resolve/main/cifar_toy.hdf5?download=true -O data/cifar_toy.hdf5
 
 
