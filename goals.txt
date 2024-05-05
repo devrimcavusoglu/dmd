@@ -11,12 +11,14 @@ NOTE: We plan to also incorporate and provide examples and conduct evaluation on
 NOTE-2: We also consider providing results (presumably only qualitative) for AFHQ as well. This is because the dataset is relatively small and easy to train, and also have a 64x64 resolution relatively higher quality compared to CIFAR-10. However, neither quantitative nor qualitative results regarding this dataset (AFHQ) are reported in the paper.
 —— version 1 submission ——
 
-With the computational resources we have, we altered some settings, specifically the batch size. The batch size used for CIFAR-10 training in the paper is 56 per GPU (7x GPU) totalling
-effective batch size of 392 (assuming no gradient accumulation is used). We conducted experiments with a single RTX 4090 GPU and setting the batch size to 32. With this reduction,
-we scaled the learning rate also with square root of the batch size scaling which is approximately 1.5e-5 from the base learning rate 5e-5 from the paper.
+With the computational resources we have, we altered some settings, specifically the batch size. The batch size used for CIFAR-10 training in the paper is 56 per GPU (7x GPU) totalling to the effective batch size of 392 (assuming no gradient accumulation is used). We conducted experiments with a single RTX 4090 GPU and setting the batch size to 48. With this reduction, we scaled the learning rate also with square root of the batch size scaling which is approximately 1.75e-5 from the base learning rate 5e-5 from the paper.
 
 We integrated Neptune.ai for experiment tracking and plan to make it public as well with giving the reference in README.md. We implement and reported FID scores on the original CIFAR-10 test split, it could be also nice to see the FID for base model (teacher) samples, as the training scheme is distillation and the sampling quality is bounded by the teacher's distribution. We plan to provide this FID metric for teacher model distribution in the upcoming experiments (v2).
 
-We get qualitatively "OK" results. Although satisfying to some level some model outputs are
+We get qualitatively satisfying results although FID is not close, but the training phase has not been completed yet (due to some bugs, mistakes, we
+allocated only a small amount of time by now (10 hours)). However, our FID is getting close to the paper as training goes on, the bugs are fixed. Nonetheless, we probably cannot reach the FID reported in the paper (2.66) because of the compute resources constraints (in the paper the model was trained in 7 GPUs with 52 batch size corresponding 8 times longer training duration for our setup (apprx. 17 days)).
 
-Due to compute intensive nature and taking dataset size into account, we did not conduct any experiments on other datasets (e.g. ImageNet-64x64 or AFHQ-64x64). This is particularly due to the objective being difficult to optimize for the model, and require many iterations to approach the teacher's distribution (as one-step generation).
+We plan to continue training CIFAR-10 training for a while to get better results. Later if we have enough time, we plan to conduct experiments on the
+AFHQ 64x64 dataset. We also plan to save image grids more informative (added labels for class ids and x, x_ref etc.).
+
+Additionally, we plan to make the notebook Colab compatible.

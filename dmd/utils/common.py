@@ -54,7 +54,7 @@ def image_grid(imgs, rows, cols, margin=2):
 
 def closest_divisors(n: int):
     """
-    Helper function for finding closest integer divisors.
+    Helper function for finding the closest integer divisors.
     Taken from https://stackoverflow.com/a/40700741
     """
     a = round(math.sqrt(n))

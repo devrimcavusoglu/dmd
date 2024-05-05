@@ -11,6 +11,15 @@ Note that this is an unofficial reimplementation study for the paper, and in thi
 with CIFAR-10 dataset reproduce the results. However, the technique may be applicable to other datasets with minor 
 adjustments.
 
+## Pretrained Models
+
+You can access to the experimentation/training logs on [neptune](https://app.neptune.ai/o/metu-ms/org/DMD).
+
+|                     | Model                                                                                                                                  |
+|---------------------|----------------------------------------------------------------------------------------------------------------------------------------|
+| CIFAR-10-32x32-cond | [https://huggingface.co/Devrim/dmd-cifar-10-cond](https://huggingface.co/Devrim/dmd-cifar-10-cond/resolve/main/model.pt?download=true) |
+
+
 ## Setup
 
 Create a conda environment with the configuration file, and activate the environment when necessary.
@@ -96,6 +105,10 @@ samples = gen.generate_batch(seeds=list(range(25)), class_ids=0)
 display_samples(samples).show()
 ```
 
+## Assumptions
+
+- Hyperparameters are explicitly stated, but there's no information for which model they are used. We assumed for both model when there is no additional information. (optimizer, lr)
+
 ## Development
 
 For convenience add the project root to PYTHONPATH, earlier conda versions support this by `develop` command, run
@@ -109,10 +122,6 @@ However, `conda develop` is deprecated for recent versions, you can manually add
 ```shell
 export PYTHONPATH="${PYTHONPATH}:/path/to/project_root"
 ```
-
-## Assumptions
-
-- Hyperparameters are explicitly stated, but there's no information for which model they are used. We assumed for both model when there is no additional information. (optimizer, lr)
 
 ### Code Formatting
 
