@@ -60,31 +60,25 @@ def load_edm(model_path: str, device: torch.device) -> Module:
 
 def load_dmd_model(model_path: str, device: torch.device) -> Module:
     """
-    Loads a pretrained model from given path. This function loads the model from the original
-    pickle file of EDM models.
-
-    Note:
-        The saved binary files (pickle) contain serialized Python object where some of them
-        require certain imports. This module is not identical to the structure of 'NVLabs/edm',
-        see the related comment.
+    Loads a pretrained DMD model from given path.
 
     Args:
         model_path (str): Path to the model weights.
         device (torch.device): Device to load the model to.
     """
     model = EDMPrecond(
-            img_resolution=32,
-            img_channels=3,
-            label_dim=10,
-            resample_filter=[1, 1],
-            embedding_type='positional',
-            augment_dim=9,
-            dropout=0.13,
-            model_type='SongUNet',
-            encoder_type='standard',
-            channel_mult_noise=1,
-            model_channels=128,
-            channel_mult=(2, 2, 2),
+        img_resolution=32,
+        img_channels=3,
+        label_dim=10,
+        resample_filter=[1, 1],
+        embedding_type="positional",
+        augment_dim=9,
+        dropout=0.13,
+        model_type="SongUNet",
+        encoder_type="standard",
+        channel_mult_noise=1,
+        model_channels=128,
+        channel_mult=(2, 2, 2),
     )
     model_dict = torch.load(model_path, map_location="cpu")
     model.load_state_dict(model_dict["model_g"])
@@ -94,7 +88,9 @@ def load_dmd_model(model_path: str, device: torch.device) -> Module:
 def encode_labels(class_ids: torch.Tensor, label_dim: int) -> Optional[torch.Tensor]:
     """One-hot encoding for given class ids."""
     class_labels = None
-    if label_dim:
+    if class_ids is None:
+        return class_labels
+    elif label_dim:
         class_labels = one_hot(class_ids, num_classes=label_dim)
     return class_labels
 

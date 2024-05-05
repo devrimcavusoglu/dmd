@@ -88,7 +88,12 @@ Then, you can use `--log-neptune` flag to automatically log metrics to your nept
 Once you trained the one-step generator. You can generate samples from it as follows:
 
 ```python
+from dmd.generate import DMDGenerator
+from dmd.utils.common import display_samples
 
+gen = DMDGenerator(network_path="/path/to/model_checkpoint.pt")
+samples = gen.generate_batch(seeds=list(range(25)), class_ids=0)
+display_samples(samples).show()
 ```
 
 ## Development

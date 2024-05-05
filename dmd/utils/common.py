@@ -58,8 +58,9 @@ def closest_divisors(n: int):
     Taken from https://stackoverflow.com/a/40700741
     """
     a = round(math.sqrt(n))
-    while n%a > 0: a -= 1
-    return a,n//a
+    while n % a > 0:
+        a -= 1
+    return a, n // a
 
 
 def display_samples(samples: torch.Tensor):

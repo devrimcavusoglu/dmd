@@ -24,7 +24,14 @@ import PIL.Image
 import torch
 import tqdm
 
-from dmd.modeling_utils import StackedRandomGenerator, encode_labels, get_sigmas_karras, load_edm
+from dmd.modeling_utils import (
+    StackedRandomGenerator,
+    encode_labels,
+    get_fixed_generator_sigma,
+    get_sigmas_karras,
+    load_dmd_model,
+    load_edm,
+)
 from dmd.sampler import edm_sampler
 from dmd.torch_utils import distributed as dist
 
@@ -56,7 +63,7 @@ class EDMGenerator:
         self.device = torch.device(self.device)
         self.model = None
         if load_on_init:
-            self.model = self.load_model(network_path, self.device)
+            self.load_model(network_path, self.device)
         self.set_config()
 
     @property
@@ -289,17 +296,18 @@ class DMDGenerator(EDMGenerator):
         self.timesteps = timesteps
 
     def load_model(self, network_path: str, device: torch.device) -> None:
-        m = torch.load(network_path, map_location="cpu")
-        self.model = m["model_g"].to(device)
-
-    def get_fixed_sigmas(self):
-        sigmas = get_sigmas_karras(self.timesteps)
+        if self.model is not None:
+            raise RuntimeError(
+                f"Model '{self.network_path}' is already loaded. To load a new model, "
+                f"use 'unload_model' first."
+            )
+        self.model = load_dmd_model(network_path, device)
 
     def generate_batch(
         self,
         seeds: List[int] = None,
         latents: torch.Tensor = None,
-        class_ids: torch.Tensor = None,
+        class_ids: Union[int, torch.Tensor] = None,
         device: str = None,
         im_channels: int = 3,
         im_resolution: int = 32,
@@ -309,59 +317,26 @@ class DMDGenerator(EDMGenerator):
             device = "cuda" if torch.cuda.is_available() else "cpu"
         device = torch.device(device)
 
-        if not latents or not seeds:
+        if not latents and not seeds:
             raise ValueError("Either `latent` or `seeds` must be provided.")
+
+        batch_size = len(seeds)
 
         if latents is None:
             scale_latents = True  # override
             rnd = StackedRandomGenerator(device, seeds)
             latents = rnd.randn(
-                [len(seeds), im_channels, im_resolution, im_resolution],
+                [batch_size, im_channels, im_resolution, im_resolution],
                 device=device,
             )
 
+        g_sigmas = get_fixed_generator_sigma(len(seeds), device=device)
         if scale_latents:
-            g_sigmas = get_fixed_generator_sigma(len(seeds), device=device)
-            latents = latents * g_sigmas
+            latents = latents * g_sigmas[0, 0]
 
-        return self.model(latents, class_ids=class_ids).to(device)
-
-    def __call__(
-        self,
-        outdir: str,
-        subdirs: bool = False,
-        seeds: Union[List[int], str] = "0-63",
-        class_idx: Optional[int] = None,
-        batch_size: int = 64,
-        device: Optional[str] = None,
-        save_format: Optional[str] = "images",
-        save_start_idx: Optional[int] = 0,
-        **kwargs,
-    ):
-        pass
-
-
-if __name__ == "__main__":
-    edm_generator = DMDGenerator(
-        network_path="/home/devrim/lab/gh/ms/dmd/outputs/toy_test/best_checkpoint.pt",
-        device="cuda",
-    )
-    # edm_generator(
-    #     "/home/devrim/lab/gh/ms/dmd/data/toy",
-    #     seeds=list(range(10)),
-    #     class_idx=0,
-    #     batch_size=64,
-    #     save_format="images",
-    # )
-
-    # model = load_model(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
-    #                              device=torch.device("cuda"))
-    # x = torch.randn((1, 3, 32, 32), device=torch.device("cuda"))
-    # sigmas = get_sigmas_karras(1000, 0.002, 80, device="cuda")
-    # labels = torch.zeros((1,10), device=torch.device("cuda"))
-    # labels[0,0] = 1
-    # x_hat = model(x, sigmas[-750], labels)
-    # d_cur = (x_hat - denoised) / t_hat
-    # x_next = x_hat + (t_next - t_hat) * d_cur
-    # im = (((x[0] - y[0]) * 1) * 127.5).permute(1,2,0).cpu().numpy().astype(np.uint8)
-    # PIL.Image.fromarray(im).show()
+        if isinstance(class_ids, int):
+            class_ids = torch.zeros(batch_size, dtype=torch.int64, device=device) + class_ids
+        elif isinstance(class_ids, list):
+            class_ids = torch.tensor(class_ids, dtype=torch.int64, device=device)
+        class_labels = encode_labels(class_ids, self.model.label_dim)
+        return self.model(latents, g_sigmas, class_labels=class_labels).to(device)
