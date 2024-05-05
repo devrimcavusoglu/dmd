@@ -1,3 +1,7 @@
+"""
+Script to convert raw image dataset (CIFAR pairs) to HDF5 dataset.
+"""
+
 import json
 from pathlib import Path
 from typing import Union

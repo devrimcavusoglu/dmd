@@ -1,4 +1,5 @@
-# Copyright (c) 2021 Open Business Software Solutions
+# Taken and adapted from https://github.com/devrimcavusoglu/pybboxes/blob/main/tests/utils.py
+
 import json
 import os
 import re

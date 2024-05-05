@@ -26,5 +26,7 @@ dependencies:
     - fire
     - imageio-ffmpeg>=0.4.3
     - isort==5.9.2
+    - matplotlib==3.8.4
     - neptune
+    - notebook
     - pyspng

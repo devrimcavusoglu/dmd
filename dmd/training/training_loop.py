@@ -1,11 +1,9 @@
-# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-#
-# This work is licensed under a Creative Commons
-# Attribution-NonCommercial-ShareAlike 4.0 International License.
-# You should have received a copy of the license along with this
-# work. If not, see http://creativecommons.org/licenses/by-nc-sa/4.0/
-
-"""Main training loop."""
+"""
+Main training loop.
+Part of this file taken and adopted from devrimcavusoglu/std repository. See
+the original file below
+https://github.com/devrimcavusoglu/std/blob/main/std/engine.py
+"""
 import math
 import sys
 from contextlib import suppress
@@ -18,7 +16,7 @@ from torch.nn.modules.loss import _Loss as TorchLoss
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
 
-from dmd.modeling_utils import encode_labels, forward_diffusion
+from dmd.modeling_utils import encode_labels, forward_diffusion, get_fixed_generator_sigma
 from dmd.utils.array import torch_to_pillow
 from dmd.utils.common import image_grid
 from dmd.utils.logging import MetricLogger
@@ -53,7 +51,6 @@ def update_parameters(model, loss, optimizer, max_norm):
 
 def train_one_epoch(
     generator: torch.nn.Module,
-    generator_sigma,
     mu_fake: torch.nn.Module,
     mu_real: torch.nn.Module,
     data_loader_train: DataLoader,
@@ -90,25 +87,18 @@ def train_one_epoch(
         y_ref = pairs["image"].to(device, non_blocking=True).to(torch.float32).clip(-1, 1)
         z_ref = pairs["latent"].to(device, non_blocking=True).to(torch.float32)
         z = torch.randn_like(y_ref, device=device)
+        generator_sigma = get_fixed_generator_sigma(z.shape[0], device=device)
         # Scale Z ~ N(0,1) (z and z_ref) w/ sigma(T-1) to match the sigma at T-1
-        z = z * generator_sigma
-        z_ref = z_ref * generator_sigma
+        z = z * generator_sigma[0, 0]  # scalar product
+        z_ref = z_ref * generator_sigma[0, 0]
         class_idx = pairs["class_id"].to(device, non_blocking=True)
         class_ids = encode_labels(class_idx, generator.label_dim)
 
         with amp_autocast():
             # Update generator
-
-            # We kept the generator (G) the same as the pretrained EDM model, which depends on
-            # sigma_t. We kept this sigma_t constant (80) in the training, and it should be used
-            # as is in the inference/sampling as well. There is no information how G is constructed,
-            # another alternative could've been to employ a equal size of UNet (SongUNet) and
-            # copy weights without time dependence, but this approach seem to have gaps between
-            # starting from the exact backbone vs. some blocks copied (e.g. no positional encoding).
-            sigmas = torch.tile(generator_sigma, (1, z.shape[0]))
             # tanh after small experiment between (no-postprocess, tanh, clipping)
-            x = generator(z, sigmas, class_labels=class_ids)
-            x_ref = generator(z_ref, sigmas, class_labels=class_ids)
+            x = generator(z, generator_sigma, class_labels=class_ids)
+            x_ref = generator(z_ref, generator_sigma, class_labels=class_ids)
             l_g = loss_g(mu_real, mu_fake, x, x_ref, y_ref, class_ids)
             if not math.isfinite(l_g.item()):
                 print(f"Generator Loss is {l_g.item()}, stopping training")

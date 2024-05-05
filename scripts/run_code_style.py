@@ -1,4 +1,5 @@
-# Copyright (c) 2021 Open Business Software Solutions
+# Taken from https://github.com/devrimcavusoglu/pybboxes/blob/main/tests/run_code_style.py
+
 import sys
 
 from scripts.utils import shell, validate_and_exit

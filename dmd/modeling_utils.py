@@ -1,12 +1,15 @@
 import pickle
 import sys
-from typing import Tuple
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch.nn import Module
+from torch.nn.functional import one_hot
 
 from dmd import SOURCES_ROOT, dnnlib
 from dmd.torch_utils import distributed as dist
+from dmd.training.networks import EDMPrecond
+from dmd.utils.common import image_grid, seed_everything
 
 
 class StackedRandomGenerator:
@@ -33,7 +36,7 @@ class StackedRandomGenerator:
         )
 
 
-def load_model(network_path: str, device: torch.device) -> Module:
+def load_edm(model_path: str, device: torch.device) -> Module:
     """
     Loads a pretrained model from given path. This function loads the model from the original
     pickle file of EDM models.
@@ -44,30 +47,51 @@ def load_model(network_path: str, device: torch.device) -> Module:
         see the related comment.
 
     Args:
-        network_path (str): Path to the model weights.
+        model_path (str): Path to the model weights.
         device (torch.device): Device to load the model to.
     """
     # Refactoring the package structure and import scheme (e.g. this module) breaks the loading of the
     # pickle file (as it also possesses the complete module structure at the save time). The following
     # line is a little trick to make the import structure the same to load the pickle without a failure.
     sys.path.insert(0, SOURCES_ROOT.as_posix())
-    with dnnlib.util.open_url(network_path, verbose=(dist.get_rank() == 0)) as f:
+    with dnnlib.util.open_url(model_path, verbose=(dist.get_rank() == 0)) as f:
         return pickle.load(f)["ema"].to(device)
 
 
-def copy_weights(original: Module, clone: Module) -> None:
+def load_dmd_model(model_path: str, device: torch.device) -> Module:
     """
-    Copies weights from `original` to `clone`.
+    Loads a pretrained DMD model from given path.
+
+    Args:
+        model_path (str): Path to the model weights.
+        device (torch.device): Device to load the model to.
     """
-    clone.load_state_dict(original.state_dict())
+    model = EDMPrecond(
+        img_resolution=32,
+        img_channels=3,
+        label_dim=10,
+        resample_filter=[1, 1],
+        embedding_type="positional",
+        augment_dim=9,
+        dropout=0.13,
+        model_type="SongUNet",
+        encoder_type="standard",
+        channel_mult_noise=1,
+        model_channels=128,
+        channel_mult=(2, 2, 2),
+    )
+    model_dict = torch.load(model_path, map_location="cpu")
+    model.load_state_dict(model_dict["model_g"])
+    return model.to(device)
 
 
-def encode_labels(class_ids: torch.Tensor, label_dim: int) -> torch.Tensor:
-    batch_size = class_ids.shape[-1]
+def encode_labels(class_ids: torch.Tensor, label_dim: int) -> Optional[torch.Tensor]:
+    """One-hot encoding for given class ids."""
     class_labels = None
-    if label_dim:
-        class_labels = torch.zeros((batch_size, label_dim), device=class_ids.device)
-        class_labels[:, class_ids] = 1
+    if class_ids is None:
+        return class_labels
+    elif label_dim:
+        class_labels = one_hot(class_ids, num_classes=label_dim)
     return class_labels
 
 
@@ -102,3 +126,60 @@ def forward_diffusion(
     ns = noise * sigma[-(t + 1), None, None, None]  # broadcast for scalar product
     noisy_x = x + ns
     return noisy_x, sigma[-(t + 1)]
+
+
+def get_fixed_generator_sigma(size: int, device: Union[str, torch.device]) -> torch.Tensor:
+    """
+    Returns sigmas of size `size` with fixed sigmas for the generator. In the paper, it
+    is fixed to T-1'th timestep for generator. In practice EDM models are fed sigma value at timestep t.
+    """
+    sigma = get_sigmas_karras(n=1000, sigma_min=0.002, sigma_max=80.0, device=device)[1]  # sigma_(T-1)
+    return torch.tile(sigma, (1, size))
+
+
+def sample_from_generator(
+    generator: EDMPrecond,
+    seeds: List[int] = None,
+    latents: torch.Tensor = None,
+    class_ids: torch.Tensor = None,
+    device: Union[str, torch.device] = None,
+    im_channels: int = 3,
+    im_resolution: int = 32,
+    scale_latents: bool = True,
+) -> torch.Tensor:
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = torch.device(device)
+
+    if not latents or not seeds:
+        raise ValueError("Either `latent` or `seeds` must be provided.")
+
+    if latents is None:
+        scale_latents = True  # override
+        rnd = StackedRandomGenerator(device, seeds)
+        latents = rnd.randn(
+            [len(seeds), im_channels, im_resolution, im_resolution],
+            device=device,
+        )
+
+    g_sigmas = get_fixed_generator_sigma(len(seeds), device=device)
+    if scale_latents:
+        latents = latents * g_sigmas[0, 0]
+
+    return generator(latents, g_sigmas, class_labels=class_ids)
+
+
+def generate_samples(model, class_id: int, size: int = 25, seed: int = 42, device: str = "cpu"):
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(device)
+    model.eval().to(device)
+    seed_everything(seed)
+    class_ids = torch.zeros(size, dtype=torch.int64, device=device)
+    class_ids += class_id
+    class_labels = encode_labels(class_ids, model.label_dim)
+    z = torch.randn((size, 3, 32, 32), device=device)
+    g_sigma = get_fixed_generator_sigma(size, device=device)
+    z = z * g_sigma[0, 0]
+    with torch.no_grad():
+        out = model(z, g_sigma, class_labels=class_labels)
+    return out

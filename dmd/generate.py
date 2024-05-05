@@ -24,7 +24,14 @@ import PIL.Image
 import torch
 import tqdm
 
-from dmd.modeling_utils import StackedRandomGenerator, encode_labels, load_model
+from dmd.modeling_utils import (
+    StackedRandomGenerator,
+    encode_labels,
+    get_fixed_generator_sigma,
+    get_sigmas_karras,
+    load_dmd_model,
+    load_edm,
+)
 from dmd.sampler import edm_sampler
 from dmd.torch_utils import distributed as dist
 
@@ -56,7 +63,7 @@ class EDMGenerator:
         self.device = torch.device(self.device)
         self.model = None
         if load_on_init:
-            self.model = load_model(network_path, self.device)
+            self.load_model(network_path, self.device)
         self.set_config()
 
     @property
@@ -99,7 +106,7 @@ class EDMGenerator:
                 f"Model '{self.network_path}' is already loaded. To load a new model, "
                 f"use 'unload_model' first."
             )
-        self.model = load_model(network_path, device)
+        self.model = load_edm(network_path, device)
 
     def unload_model(self):
         if self.model is not None:
@@ -283,27 +290,53 @@ class EDMGenerator:
         return latents, images
 
 
-if __name__ == "__main__":
-    edm_generator = EDMGenerator(
-        network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
-        device="cuda",
-    )
-    edm_generator(
-        "/home/devrim/lab/gh/ms/dmd/data/toy",
-        seeds=list(range(10)),
-        class_idx=0,
-        batch_size=64,
-        save_format="images",
-    )
+class DMDGenerator(EDMGenerator):
+    def __init__(self, timesteps: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.timesteps = timesteps
 
-    # model = load_model(network_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl",
-    #                              device=torch.device("cuda"))
-    # x = torch.randn((1, 3, 32, 32), device=torch.device("cuda"))
-    # sigmas = get_sigmas_karras(1000, 0.002, 80, device="cuda")
-    # labels = torch.zeros((1,10), device=torch.device("cuda"))
-    # labels[0,0] = 1
-    # x_hat = model(x, sigmas[-750], labels)
-    # d_cur = (x_hat - denoised) / t_hat
-    # x_next = x_hat + (t_next - t_hat) * d_cur
-    # im = (((x[0] - y[0]) * 1) * 127.5).permute(1,2,0).cpu().numpy().astype(np.uint8)
-    # PIL.Image.fromarray(im).show()
+    def load_model(self, network_path: str, device: torch.device) -> None:
+        if self.model is not None:
+            raise RuntimeError(
+                f"Model '{self.network_path}' is already loaded. To load a new model, "
+                f"use 'unload_model' first."
+            )
+        self.model = load_dmd_model(network_path, device)
+
+    def generate_batch(
+        self,
+        seeds: List[int] = None,
+        latents: torch.Tensor = None,
+        class_ids: Union[int, torch.Tensor] = None,
+        device: str = None,
+        im_channels: int = 3,
+        im_resolution: int = 32,
+        scale_latents: bool = True,
+    ) -> torch.Tensor:
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = torch.device(device)
+
+        if not latents and not seeds:
+            raise ValueError("Either `latent` or `seeds` must be provided.")
+
+        batch_size = len(seeds)
+
+        if latents is None:
+            scale_latents = True  # override
+            rnd = StackedRandomGenerator(device, seeds)
+            latents = rnd.randn(
+                [batch_size, im_channels, im_resolution, im_resolution],
+                device=device,
+            )
+
+        g_sigmas = get_fixed_generator_sigma(len(seeds), device=device)
+        if scale_latents:
+            latents = latents * g_sigmas[0, 0]
+
+        if isinstance(class_ids, int):
+            class_ids = torch.zeros(batch_size, dtype=torch.int64, device=device) + class_ids
+        elif isinstance(class_ids, list):
+            class_ids = torch.tensor(class_ids, dtype=torch.int64, device=device)
+        class_labels = encode_labels(class_ids, self.model.label_dim)
+        return self.model(latents, g_sigmas, class_labels=class_labels).to(device)

@@ -32,15 +32,18 @@ class DistributionMatchingLoss(_Loss):
             pred_fake_image = mu_fake(noisy_x, sigma_t, class_labels=class_ids)
             pred_real_image = mu_real(noisy_x, sigma_t, class_labels=class_ids)
 
-        weighting_factor = torch.abs(x - pred_real_image).mean(
-            dim=[1, 2, 3], keepdim=True
-        )  # /  (sigma_t**2)  # Eqn. 8
+        weighting_factor = torch.abs(x - pred_real_image).mean(dim=[1, 2, 3], keepdim=True)  # Eqn. 8
         grad = (pred_fake_image - pred_real_image) / weighting_factor
         diff = (x - grad).detach()  # stop-gradient
         return 0.5 * F.mse_loss(x, diff, reduction=self.reduction)
 
 
 class GeneratorLoss(_Loss):
+    """
+    Combined loss for the generator model. See § 3.4 (Final Objective).
+    D_KL + lambda_reg * L_reg
+    """
+
     def __init__(self, timesteps: int = 1000, lambda_reg: float = 0.25, *args, **kwargs) -> None:
         super().__init__(self, *args, **kwargs)
         self.dmd_loss = DistributionMatchingLoss(timesteps)
@@ -78,7 +81,7 @@ class DenoisingLoss(_Loss):
         self, mu_fake: Module, x: torch.Tensor, t: torch.Tensor, class_ids: torch.Tensor = None
     ) -> torch.Tensor:
         x_t, sigma_t = forward_diffusion(x.detach(), t)  # stop grad
-        # Algorithm SNR + 1 / sigma_data^2 for EDM (sigma_data = 0.5)
         pred_fake_image = mu_fake(x_t, sigma_t, class_labels=class_ids)
+        # Algorithm SNR + 1 / sigma_data^2 for EDM (sigma_data = 0.5)
         weight = 1 / sigma_t**2 + 1 / mu_fake.sigma_data**2
         return torch.mean(weight[:, None, None, None] * (pred_fake_image - x.detach()) ** 2)
