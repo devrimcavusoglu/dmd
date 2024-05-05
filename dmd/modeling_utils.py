@@ -79,7 +79,7 @@ def load_dmd_model(model_path: str, device: torch.device) -> Module:
 def encode_labels(class_ids: torch.Tensor, label_dim: int) -> Optional[torch.Tensor]:
     class_labels = None
     if label_dim:
-        one_hot(class_ids, num_classes=label_dim)
+        class_labels = one_hot(class_ids, num_classes=label_dim)
     return class_labels
 
 
