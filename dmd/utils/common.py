@@ -1,3 +1,4 @@
+import math
 import os
 import random
 from configparser import ConfigParser
@@ -8,6 +9,7 @@ import numpy as np
 import PIL.Image
 import torch
 
+from dmd.utils.array import torch_to_pillow
 from dmd.utils.training import get_rank
 
 
@@ -48,3 +50,19 @@ def image_grid(imgs, rows, cols, margin=2):
     for i, img in enumerate(imgs):
         grid.paste(img, box=(i % cols * (w + margin) + margin, i // cols * (h + margin) + margin))
     return grid
+
+
+def closest_divisors(n: int):
+    """
+    Helper function for finding closest integer divisors.
+    Taken from https://stackoverflow.com/a/40700741
+    """
+    a = round(math.sqrt(n))
+    while n%a > 0: a -= 1
+    return a,n//a
+
+
+def display_samples(samples: torch.Tensor):
+    pims = torch_to_pillow(samples)
+    n_row, n_col = closest_divisors(len(samples))
+    return image_grid(pims, n_row, n_col)

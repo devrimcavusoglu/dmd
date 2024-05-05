@@ -48,7 +48,7 @@ For reference, sample images from both CIFAR-10 datasets and from the base condi
 Start training by running
 
 ```shell
-python -m dmd train --model-path https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl --data-path /home/devrim/lab/gh/ms/dmd/data/distillation_dataset_h5/cifar_toy.hdf5 --output-dir /home/devrim/lab/gh/ms/dmd/outputs/toy --epochs 2 --batch-size 32 --log-neptune
+python -m dmd train --model-path https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl --data-path /path/to/hdf5_data --output-dir /path/to/output-dir --epochs 2 --batch-size 32
 ```
 
 To see all training arguments run
@@ -56,6 +56,21 @@ To see all training arguments run
 ```shell
 python -m dmd train --help
 ```
+
+### Output Images
+
+The `output_dir` used for saving checkpoints of the model, also used for saving images sampled from the model during training. The images saved are a grid of size `(5, batch_size)` where the rows correspond to `(x, x_real, x_pred, x_ref, y_ref)` respectively. We respect to the paper naming convention for these:
+
+    z: Random sample from N(0,1).
+    x: G(z). (row=1)
+    s: edm_sigma(t) # t ~ U(0,1)
+    noisy_x: forward_diffusion(x, s)  
+    x_real: mu_real(noisy_x, t)  (row=2) # 'pred_real_image' in the paper
+    x_fake: mu_fake(noisy_x, t)  (row=3) # 'pred_fake_image' in the paper
+    z_ref: Paired latent from the synthetic dataset.
+    x_ref: G(z_ref). (row=4)
+    y_ref: Paired image sampled from the base pretrained model. (row=5)
+    
 
 ### Logging to Neptune
 
@@ -70,7 +85,11 @@ token=<replace-with-your-token>
 Then, you can use `--log-neptune` flag to automatically log metrics to your neptune project.
 
 ## Generation
-WIP.
+Once you trained the one-step generator. You can generate samples from it as follows:
+
+```python
+
+```
 
 ## Development
 

@@ -9,7 +9,7 @@ from torch.nn.functional import one_hot
 from dmd import SOURCES_ROOT, dnnlib
 from dmd.torch_utils import distributed as dist
 from dmd.training.networks import EDMPrecond
-from dmd.utils.common import image_grid
+from dmd.utils.common import image_grid, seed_everything
 
 
 class StackedRandomGenerator:
@@ -72,11 +72,27 @@ def load_dmd_model(model_path: str, device: torch.device) -> Module:
         model_path (str): Path to the model weights.
         device (torch.device): Device to load the model to.
     """
-    m = torch.load(model_path, map_location="cpu")
-    return m["model_g"].to(device)
+    model = EDMPrecond(
+            img_resolution=32,
+            img_channels=3,
+            label_dim=10,
+            resample_filter=[1, 1],
+            embedding_type='positional',
+            augment_dim=9,
+            dropout=0.13,
+            model_type='SongUNet',
+            encoder_type='standard',
+            channel_mult_noise=1,
+            model_channels=128,
+            channel_mult=(2, 2, 2),
+    )
+    model_dict = torch.load(model_path, map_location="cpu")
+    model.load_state_dict(model_dict["model_g"])
+    return model.to(device)
 
 
 def encode_labels(class_ids: torch.Tensor, label_dim: int) -> Optional[torch.Tensor]:
+    """One-hot encoding for given class ids."""
     class_labels = None
     if label_dim:
         class_labels = one_hot(class_ids, num_classes=label_dim)
@@ -157,11 +173,17 @@ def sample_from_generator(
     return generator(latents, g_sigmas, class_labels=class_ids)
 
 
-if __name__ == "__main__":
-    device = torch.device("cuda")
-    model = load_dmd_model("/home/devrim/lab/gh/ms/dmd/outputs/toy_test/best_checkpoint.pt", device)
-    seeds = list(range(10))
-    class_ids = torch.tensor([0] * len(seeds), device=device)
-    encode_labels(class_ids=class_ids, label_dim=10)
-    r = sample_from_generator(model, seeds=seeds, class_ids=class_ids, device=device)
-    image_grid(r, 2, 5)
+def generate_samples(model, class_id: int, size: int = 25, seed: int = 42, device: str = "cpu"):
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(device)
+    model.eval().to(device)
+    seed_everything(seed)
+    class_ids = torch.zeros(size, dtype=torch.int64, device=device)
+    class_ids += class_id
+    class_labels = encode_labels(class_ids, model.label_dim)
+    z = torch.randn((size, 3, 32, 32), device=device)
+    g_sigma = get_fixed_generator_sigma(size, device=device)
+    z = z * g_sigma[0, 0]
+    with torch.no_grad():
+        out = model(z, g_sigma, class_labels=class_labels)
+    return out
