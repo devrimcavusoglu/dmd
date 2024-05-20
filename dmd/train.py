@@ -193,7 +193,7 @@ def run(
     if resume_from_checkpoint and output_dir is None:
         warnings.warn("`output_dir` is set to `model_path` when `resume_from_checkpoint` is `True`.")
         output_dir = Path(model_path).parent
-
+    output_dir = Path(output_dir)
     seed_everything(seed)
     # Prepare dataloader
     data_path = Path(data_path).resolve()
