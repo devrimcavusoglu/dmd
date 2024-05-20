@@ -28,7 +28,6 @@ from dmd.modeling_utils import (
     StackedRandomGenerator,
     encode_labels,
     get_fixed_generator_sigma,
-    get_sigmas_karras,
     load_dmd_model,
     load_edm,
 )

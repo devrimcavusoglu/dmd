@@ -1,15 +1,16 @@
 import pickle
 import sys
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Dict, Any
 
 import torch
 from torch.nn import Module
 from torch.nn.functional import one_hot
+from torch.optim import AdamW
 
 from dmd import SOURCES_ROOT, dnnlib
 from dmd.torch_utils import distributed as dist
 from dmd.training.networks import EDMPrecond
-from dmd.utils.common import image_grid, seed_everything
+from dmd.utils.common import seed_everything
 
 
 class StackedRandomGenerator:
@@ -58,15 +59,19 @@ def load_edm(model_path: str, device: torch.device) -> Module:
         return pickle.load(f)["ema"].to(device)
 
 
-def load_dmd_model(model_path: str, device: torch.device) -> Module:
+def load_dmd_model(model_path: str, device: torch.device, for_training: bool = False, optimizer_kwargs: Dict[str, Any] = None) -> Union[Module, Tuple]:
     """
     Loads a pretrained DMD model from given path.
 
     Args:
         model_path (str): Path to the model weights.
         device (torch.device): Device to load the model to.
+        for_training (bool): Whether to only load the distilled one-step diffusion model. Otherwise,
+            returns a tuple of all model and optimizer required for training. [default: False]
+        optimizer_kwargs (dict(str, any)): Optional keyword arguments to pass to the optimizer class (AdamW).
+            This argument is ignored when `for_training` is set to `False`.
     """
-    model = EDMPrecond(
+    model_g = EDMPrecond(
         img_resolution=32,
         img_channels=3,
         label_dim=10,
@@ -81,8 +86,32 @@ def load_dmd_model(model_path: str, device: torch.device) -> Module:
         channel_mult=(2, 2, 2),
     )
     model_dict = torch.load(model_path, map_location="cpu")
-    model.load_state_dict(model_dict["model_g"])
-    return model.to(device)
+    model_g.load_state_dict(model_dict["model_g"])
+    model_g.to(device)
+    if not for_training:
+        return model_g.to(device)
+    optimizer_kwargs = optimizer_kwargs or {}
+    model_d = EDMPrecond(
+        img_resolution=32,
+        img_channels=3,
+        label_dim=10,
+        resample_filter=[1, 1],
+        embedding_type="positional",
+        augment_dim=9,
+        dropout=0.13,
+        model_type="SongUNet",
+        encoder_type="standard",
+        channel_mult_noise=1,
+        model_channels=128,
+        channel_mult=(2, 2, 2),
+    )
+    model_d.load_state_dict(model_dict["model_d"])
+    model_d.to(device)
+    optimizer_g = AdamW(model_g.parameters(), **optimizer_kwargs)
+    optimizer_d = AdamW(model_d.parameters(), **optimizer_kwargs)
+    optimizer_g.load_state_dict(model_dict["optimizer_g"])
+    optimizer_d.load_state_dict(model_dict["optimizer_d"])
+    return model_g, optimizer_g, model_d, optimizer_d
 
 
 def encode_labels(class_ids: torch.Tensor, label_dim: int) -> Optional[torch.Tensor]:
