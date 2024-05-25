@@ -31,12 +31,12 @@ def read_cfg(fp: str, encoding: Optional[str] = None, **kwargs) -> ConfigParser:
     return cfg
 
 
-def create_experiment(config_path: str) -> neptune.Run:
+def create_experiment(config_path: str, run_id: Optional[str] = None) -> neptune.Run:
     """
     Creates a Neptune Experiment
     """
     cfg = read_cfg(config_path)["credentials"]
-    return neptune.init_run(project=cfg["project"], api_token=cfg["token"])
+    return neptune.init_run(with_id=run_id, project=cfg["project"], api_token=cfg["token"])
 
 
 def image_grid(imgs, rows, cols, margin=2):

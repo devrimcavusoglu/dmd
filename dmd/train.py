@@ -7,6 +7,7 @@ https://github.com/devrimcavusoglu/std/blob/main/std/main.py
 
 import datetime
 import time
+import warnings
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -23,7 +24,7 @@ from dmd import NEPTUNE_CONFIG_PATH, PROJECT_ROOT
 from dmd.dataset.cifar_pairs import CIFARPairs
 from dmd.fid import FID
 from dmd.loss import DenoisingLoss, GeneratorLoss
-from dmd.modeling_utils import load_edm
+from dmd.modeling_utils import load_edm, load_dmd_model
 from dmd.training.training_loop import train_one_epoch
 from dmd.utils.common import create_experiment, seed_everything
 from dmd.utils.logging import CheckpointHandler
@@ -136,8 +137,8 @@ def train(
 def run(
     model_path: str,
     data_path: str,
-    output_dir: str,
     epochs: int,
+    output_dir: str = None,
     batch_size: int = 56,
     eval_batch_size: int = 128,
     num_workers: int = 10,
@@ -148,6 +149,8 @@ def run(
     dmd_loss_lambda: float = 0.25,
     device: str = None,
     log_neptune: bool = False,
+    neptune_run_id: Optional[str] = None,
+    resume_from_checkpoint: bool = False,
     cudnn_benchmark: bool = True,
     amp_autocast: Optional = None,
     max_norm: float = 10.0,
@@ -162,8 +165,8 @@ def run(
     Args:
         model_path (str): Path to the model.
         data_path (str): Path of the h5 dataset file.
-        output_dir (str): Path to the output directory to save the model.
         epochs (int): Number of epochs to train.
+        output_dir (str): Path to the output directory to save the model.
         batch_size (int): Batch size used in training process. [default: 56]
         eval_batch_size (int): Batch size used in evaluation process. [default: 128]
         num_workers (int): Number of workers for data loader. [default: 10]
@@ -174,6 +177,8 @@ def run(
         dmd_loss_lambda (float): Lambda for the DMD loss. [default: 0.25]
         device (Optional(str)): Device to run the models on. [default: None]
         log_neptune (bool): Whether to log metrics to neptune. [default: False]
+        neptune_run_id (Optional(str)): Neptune run id. [default: None]
+        resume_from_checkpoint (bool): Whether to resume from a checkpoint. [default: False]
         cudnn_benchmark (bool): Whether to use CUDNN benchmark. [default: True]
         amp_autocast (Optional): Whether to use AMP autocast. [default: None]
         max_norm (Optional[float]): Maximum norm of the gradients. [default: 10.0]
@@ -182,6 +187,13 @@ def run(
         model_save_steps (int): Frequency to save the model checkpoint. [default: 1600]
         seed (Optional[int]): Random seed to seed all. [default: 42]
     """
+    # sanity check
+    if not resume_from_checkpoint and output_dir is None:
+        raise ValueError("`output_dir` must be given when `resume_from_checkpoint` is `False`.")
+    if resume_from_checkpoint and output_dir is None:
+        warnings.warn("`output_dir` is set to `model_path` when `resume_from_checkpoint` is `True`.")
+        output_dir = Path(model_path).parent
+    output_dir = Path(output_dir)
     seed_everything(seed)
     # Prepare dataloader
     data_path = Path(data_path).resolve()
@@ -196,17 +208,21 @@ def run(
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device)
-    mu_real = load_edm(model_path=model_path, device=device)
-    mu_fake = load_edm(model_path=model_path, device=device)
-    generator = load_edm(model_path=model_path, device=device)
+    optimizer_kwargs = {"lr": lr, "weight_decay": weight_decay, "betas": betas}
+    mu_real = load_edm(model_path="https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl", device=device)
+    if resume_from_checkpoint:
+        generator, generator_optimizer, mu_fake, diffuser_optimizer = load_dmd_model(model_path=model_path, device=device, for_training=True, optimizer_kwargs=optimizer_kwargs)
+    else:
+        mu_fake = load_edm(model_path=model_path, device=device)
+        generator = load_edm(model_path=model_path, device=device)
+
+        # Create optimizers
+        generator_optimizer = AdamW(params=generator.parameters(), **optimizer_kwargs)
+        diffuser_optimizer = AdamW(params=mu_fake.parameters(), **optimizer_kwargs)
 
     # Create losses
     generator_loss = GeneratorLoss(timesteps=dmd_loss_timesteps, lambda_reg=dmd_loss_lambda)
     diffusion_loss = DenoisingLoss()
-
-    # Create optimizers
-    generator_optimizer = AdamW(params=generator.parameters(), lr=lr, weight_decay=weight_decay, betas=betas)
-    diffuser_optimizer = AdamW(params=mu_fake.parameters(), lr=lr, weight_decay=weight_decay, betas=betas)
 
     checkpoint_handler = CheckpointHandler(
         checkpoint_dir=output_dir, lower_is_better=True
@@ -215,11 +231,11 @@ def run(
     neptune_run = None
     if log_neptune:
         # create neptune run
-        neptune_run = create_experiment(NEPTUNE_CONFIG_PATH)
+        neptune_run = create_experiment(NEPTUNE_CONFIG_PATH, run_id=neptune_run_id)
         neptune_run["training_args"] = {
             "model_path": model_path,
-            "data_path": data_path,
-            "output_dir": output_dir,
+            "data_path": data_path.as_posix(),
+            "output_dir": output_dir.as_posix(),
             "epochs": epochs,
             "batch_size": batch_size,
             "lr": lr,

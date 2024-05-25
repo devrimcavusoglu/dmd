@@ -184,7 +184,7 @@ class CheckpointHandler:
     Checkpoint manager for saving and loading from a checkpoint of trained models.
     """
 
-    def __init__(self, checkpoint_dir: str, lower_is_better: bool = True):
+    def __init__(self, checkpoint_dir: str, lower_is_better: bool = True, resume_from_checkpoint: bool = False):
         self.checkpoint_dir = Path(checkpoint_dir)
         self.lower_is_better = lower_is_better
         self._metric_value = float("inf") if lower_is_better else -float("inf")
