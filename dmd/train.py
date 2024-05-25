@@ -276,12 +276,3 @@ def run(
 
     if neptune_run:
         neptune_run.stop()
-
-
-if __name__ == "__main__":
-    """
-    --model-path outputs/cifar_10_cond_lr_5e-5_bs48_ep300/ --data-path data/distillation_dataset_h5/cifar.hdf5 --epochs 2 -r --device cuda --batch-size 48
-    """
-    run(
-        model_path="outputs/cifar_10_cond_lr_5e-5_bs48_ep300/"
-    )
