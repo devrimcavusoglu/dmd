@@ -22,3 +22,8 @@ We plan to continue training CIFAR-10 training for a while to get better results
 AFHQ 64x64 dataset. We also plan to save image grids more informative (added labels for class ids and x, x_ref etc.).
 
 Additionally, we plan to make the notebook Colab compatible.
+
+—— version 2 submission ——
+As we already have mentioned our target to be reproducing the paper results for CIFAR-10 conditional training/generation, we continued the training process for more days reaching a smaller FID score of 4.43 (as of now). During the project-v1 submission our FID score was around 5.32, so we the current state (FID of 4.43) as a significant improvement. Also, apart from the quantitative results we aim to reproduce, we are confident that qualitatively our model performs comparable to the qualitative results provided in the paper.
+
+We put our effort and compute resource (and time) to improve on the CIFAR-10 results and hoping to get close to the FID score of the paper. Since the compute resources are dedicated to this training in the meantime, we could not work on AFHQ 64x64 dataset.
