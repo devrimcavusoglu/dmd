@@ -12,7 +12,7 @@ This folder provides a re-implementation of this paper in PyTorch, developed as 
 
 Please see the jupyter notebook file [main.ipynb](main.ipynb) for a summary of paper, the implementation notes and our experimental results.
 
-The project codebase here is a snapshot and refers to a specific commit in the maintained version of the codebase: [devrimcavusoglu/dm@project-v2](https://github.com/devrimcavusoglu/dmd). To see the up-to-date version of the DMD project, open issues or for questions refer to [devrimcavusoglu/dmd](https://github.com/devrimcavusoglu/dmd).
+The project codebase here is a snapshot and refers to a specific commit in the maintained version of the codebase: [devrimcavusoglu/dmd@project-v2](https://github.com/devrimcavusoglu/dmd). To see the up-to-date version of the DMD project, open issues or for questions refer to [devrimcavusoglu/dmd](https://github.com/devrimcavusoglu/dmd).
 
 ## License
 
